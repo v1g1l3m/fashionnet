@@ -21,7 +21,8 @@ dataset_train_path=os.path.join(dataset_path, 'train')
 dataset_val_path=os.path.join(dataset_path, 'validation')
 dataset_test_path=os.path.join(dataset_path, 'test')
 fashion_dataset_path='../Data/fashion_data/'
-
+exclude = ['Cape','Nightdress','Shirtdress','Sundress','Halter','Coverup','Sarong','Jodhpurs','Gauchos','Caftan','Onesie','Capris','Peacoat','Kaftan','Anorak']
+keep = [730, 365, 513, 495, 836, 596, 822, 254, 884, 142, 212, 883, 837, 892, 380, 353, 196, 546, 335, 162, 441, 717, 760, 568, 310, 705, 745, 81, 226, 830, 620, 577, 1, 640, 956, 181, 831, 720, 601, 112, 820, 935, 969, 358, 933, 983, 616, 292, 878, 818, 337, 121, 236, 470, 781, 282, 913, 93, 227, 698, 268, 61, 681, 713, 239, 839, 722, 204, 457, 823, 695, 993, 0, 881, 817, 571, 565, 770, 751, 692, 593, 825, 574, 50, 207, 186, 237, 563, 300, 453, 897, 944, 438, 688, 413, 409, 984, 191, 697, 368, 133, 676, 11, 754, 800, 83, 14, 786, 141, 841, 415, 608, 276, 998, 99, 851, 429, 287, 815, 437, 747, 44, 988, 249, 543, 560, 653, 843, 208, 899, 321, 115, 887, 699, 15, 764, 48, 749, 852, 811, 862, 392, 937, 87, 986, 129, 336, 689, 245, 911, 309, 775, 638, 184, 797, 512, 45, 682, 139, 306, 880, 231, 802, 264, 648, 410, 30, 356, 531, 982, 116, 599, 774, 900, 218, 70, 562, 108, 25, 450, 785, 877, 18, 42, 624, 716, 36, 920, 423, 784, 788, 538, 325, 958, 480, 20, 38, 931, 666, 561]
 def create_category_structure(category_names):
     for category_name in category_names:
         # Train
@@ -204,14 +205,28 @@ if __name__ == '__main__':
     # jobs.append(indexes[(num_proc - 1)*b:])
     # p = Pool(num_proc)
     # p.map(generate_dataset_iou, jobs)
-    create_category_structure(class_names)
-    with open(fashion_dataset_path + 'Anno/list_category_img.txt') as f:
-        total_count = int(f.readline())
-    b = total_count // num_proc
-    jobs = [((num_proc-1)*b, total_count)]
-    for i in range(num_proc - 1):
-        jobs.append((i*b, (i+1)*b))
-    print(jobs)
-    # p = Pool(num_proc)
-    # p.map(generate_dataset_three_heads, jobs)
-    generate_dataset_three_heads((0,total_count))
+    # create_category_structure(class_names)
+    # with open(fashion_dataset_path + 'Anno/list_category_img.txt') as f:
+    #     total_count = int(f.readline())
+    # b = total_count // num_proc
+    # jobs = [((num_proc-1)*b, total_count)]
+    # for i in range(num_proc - 1):
+    #     jobs.append((i*b, (i+1)*b))
+    # print(jobs)
+    # # p = Pool(num_proc)
+    # # p.map(generate_dataset_three_heads, jobs)
+    # generate_dataset_three_heads((0,total_count))
+    # attr_stat = np.zeros((1000,))
+    # with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_img.txt')) as f:
+    #     next(f)
+    #     next(f)
+    #     for line in f:
+    #         line = line.split()
+    #         attrs = eval('[' + ','.join(line[1:]) + ']')
+    #         for i,a in enumerate(attrs):
+    #             if a == 1:
+    #                 attr_stat[i] += 1
+    # amounts = [(attr_stat[i], i) for i in range(1000)]
+    # b=sorted(amounts, reverse=True)
+    # print([x[1] for x in b[:200]])
+    pass

@@ -48,10 +48,12 @@ def bb_intersection_over_union(boxes1, boxes2):
     iou = interArea / (boxAArea + boxBArea - interArea)
     return iou
 
-def plot_history(output_path):
+def plot_history(output_path, sep=';'):
     def plot_history(metric, names, log):
         plt.style.use("ggplot")
         (fig, ax) = plt.subplots(len(names), 1, figsize=(8, 8))
+        if len(names) == 1:
+            ax = [ax]
         # loop over the accuracy names
         for (i, l) in enumerate(names):
             # plot the loss for both the training and validation data
@@ -66,11 +68,12 @@ def plot_history(output_path):
         plt.tight_layout()
         fig.show()
         fig.savefig(os.path.join(output_path, metric+'.png'))
-    log = pd.DataFrame.from_csv(os.path.join(output_path, 'model_train.csv'), sep=';')
+    log = pd.DataFrame.from_csv(os.path.join(output_path, 'model_train.csv'), sep=sep)
     losses = [i for i in log.keys() if not i.startswith('val_') and i.endswith('loss')]
     accs = [i for i in log.keys() if not i.startswith('val_') and i.endswith('acc')]
     plot_history('Accuracy',accs,log)
     plot_history('Loss', losses, log)
+    return
 
 def get_image_paths(prediction_path):
     images_path_name = sorted(glob.glob(prediction_path + '/*.*g'))
@@ -98,7 +101,6 @@ def draw_rect(ax, img, gt_bbox, text=None, textcolor=(0,0,0), edgecolor='red',li
     ax.imshow(img, aspect='equal')
 
 if __name__ == '__main__':
-    plot_history(output_path)
-    a=2
+    plot_history(output_path, sep=' ')
 
 

@@ -16,14 +16,6 @@ logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ]
 
 ### GLOBALS
 epochs = 100
-# optimizer='Adagrad'    # 70% Inception
-# optimizer='Adam'       # 44% Inception
-# optimizer='RMSprop'    # 70% Inception
-optimizer='Adadelta'   # 65% Inception
-# optimizer='Adamax'     # 45% Inception
-# optimizer='SGD'         # 42%; might go above 50
-# learn_rate=0.001
-dropout_rate=0.5
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
@@ -95,18 +87,18 @@ def create_model(is_input_bottleneck, input_shape):
 
     ## Classes
     x = Flatten(name='flatten_cls')(common_inputs)
-    x = Dense(512, activation='relu', name='dense_1_cls')(x)
-    x = Dropout(dropout_rate, name='drop_1_cls')(x)
-    x = Dense(1024, activation='relu', name='dense_2_cls')(x)
-    x = Dropout(dropout_rate, name='drop_2_cls')(x)
+    x = Dense(256, activation='tanh', name='dense_1_cls')(x)
+    x = Dropout(0.5, name='drop_1_cls')(x)
+    x = Dense(1024, activation='tanh', name='dense_2_cls')(x)
+    x = Dropout(0.5, name='drop_2_cls')(x)
     predictions_class = Dense(len(class_names), activation='softmax', name='predictions_class')(x)
 
     # Attributes
     x = Flatten(name='flatten_attr')(common_inputs)
-    x = Dense(512, activation='relu', name='dense_1_attr')(x)
-    x = Dropout(dropout_rate, name='drop_1_attr')(x)
-    x = Dense(2048, activation='relu', name='dense_2_attr')(x)
-    x = Dropout(dropout_rate, name='drop_2_attr')(x)
+    x = Dense(256, activation='tanh', name='dense_1_attr')(x)
+    x = Dropout(0.5, name='drop_1_attr')(x)
+    x = Dense(2048, activation='tanh', name='dense_2_attr')(x)
+    x = Dropout(0.5, name='drop_2_attr')(x)
     predictions_attr = Dense(len(attr_names), activation='sigmoid', name='predictions_attr')(x)
 
     ## Create Model
@@ -117,10 +109,6 @@ def create_model(is_input_bottleneck, input_shape):
         for layer in model.layers[:19]:
             layer.trainable = False
     logging.info('summary:{}'.format(model.summary()))
-    ## Compile
-    model.compile(optimizer=get_optimizer('Adadelta')[0],
-                  loss={'predictions_class': 'categorical_crossentropy', 'predictions_attr': 'binary_crossentropy'},
-                  metrics=['accuracy'])
     return model
 
 def train_model(batch_size):
@@ -145,7 +133,7 @@ def train_model(batch_size):
     log_path = os.path.join(output_path, 'model_train.csv')
     csv_log = CSVLogger(log_path , separator=';', append=False)
     early_stopping = EarlyStopping(
-        monitor='loss', patience=5, verbose=1, mode='min')
+        monitor='val_loss', patience=5, verbose=1, mode='min')
     #filepath = "output/best-weights-{epoch:03d}-{loss:.4f}-{acc:.4f}.hdf5"
     filepath = os.path.join(output_path, 'best-weights-{epoch:03d}-{val_loss:.4f}-{val_acc:.4f}.hdf5')
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1,
@@ -159,6 +147,10 @@ def train_model(batch_size):
     model = create_model(True, input_shape)
     with open(os.path.join(output_path, 'bottleneck_fc_model.json'), 'w') as f:
         f.write(model.to_json())
+    ## Compile
+    model.compile(optimizer=RMSprop(lr=1e-4),
+                  loss={'predictions_class': 'categorical_crossentropy', 'predictions_attr': 'binary_crossentropy'},
+                  metrics=['accuracy'])
     # train_gen = np_arrays_reader(os.path.join(btl_path, 'btl_train_npz.txt'))
     # val_gen = np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz.txt'))
     # val_data = []

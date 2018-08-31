@@ -4,6 +4,7 @@ import numpy as np
 import random
 import shutil
 from PIL import Image
+import skimage
 from keras.optimizers import *
 from keras.applications import VGG16
 from keras.applications.vgg16 import preprocess_input
@@ -209,12 +210,14 @@ if __name__ == '__main__':
     #            loss={'predictions_class': 'categorical_crossentropy', 'predictions_attr': 'binary_crossentropy'},
     #               metrics=['accuracy'])
     m2 = load_model('best/attr_class1/best-weights.hdf5')
-    with open('best/iou0/bottleneck_fc_model.json') as f:
-        m1 = model_from_json(f.read())
-    m1.load_weights('best/iou0/bottleneck_fc_model.h5', by_name=True)
-    m1.compile(optimizer=Adadelta(lr=1.0, rho=0.95, epsilon=1e-08, decay=0.0), loss='mean_squared_error', metrics=['accuracy'])
+    # with open('best/iou0/bottleneck_fc_model.json') as f:
+    #     m1 = model_from_json(f.read())
+    # m1.load_weights('best/iou0/bottleneck_fc_model.h5', by_name=True)
+    # m1.compile(optimizer=Adadelta(lr=1.0, rho=0.95, epsilon=1e-08, decay=0.0), loss='mean_squared_error', metrics=['accuracy'])
+    m1 = load_model('best/iou1/best-weights.hdf5')
     for index, img_path in enumerate(get_image_paths(prediction_path)):
-        bboxeswh = selective_search_aggregated(img_path)
+        w, h, ch = skimage.io.imread(img_path).shape
+        bboxeswh = cluster_bboxes(selective_search_aggregated(img_path), w, h, -0.05)
         image_crops = get_crops_resized(img_path, bboxeswh)
         images_list = preprocess_input(np.array(image_crops))
         predictions = base_model.predict(images_list, batch_size)
@@ -226,7 +229,7 @@ if __name__ == '__main__':
         prediction_class_prob = []
         prediction_class_name = []
         for pred_iou, pred_cls, pred_attr in zip(predictions_iou, predictions_cls, predictions_attr):
-            prediction_iou.append(pred_iou[0])
+            prediction_iou.append(np.max(pred_iou))
             prediction_class_prob.append(np.max(pred_cls))
             prediction_class_name.append(class_names_RU[np.argmax(pred_cls)])
             prediction_attr_probs.append(pred_attr)

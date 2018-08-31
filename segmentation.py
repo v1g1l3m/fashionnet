@@ -39,10 +39,10 @@ def selective_search_bboxwh(image, scale=500, sigma=0.35, min_size=50, rescale=1
         candidates.add(r['rect'])
     return candidates
 
-def cluster_bboxes(bboxes, width, height):
+def cluster_bboxes(bboxes, width, height, preference=-0.5):
     bboxes_clustered = []
     X = np.array([[bb[0] / width, bb[1] / height, bb[2] / width, bb[3] / height] for bb in bboxes])
-    af = AffinityPropagation(preference=-0.5).fit(X)
+    af = AffinityPropagation(preference=preference).fit(X)
     labels = af.labels_
     for cluster in np.unique(labels):
         bboxes_cluster = X[labels == cluster]
