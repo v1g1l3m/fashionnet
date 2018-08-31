@@ -1,0 +1,7 @@
+.idea/
+output/
+results/
+__pycache__/
+tensorflow/
+best/
+*.pyc
