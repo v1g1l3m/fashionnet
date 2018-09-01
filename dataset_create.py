@@ -11,7 +11,7 @@ from skimage import exposure
 import PIL
 from PIL import Image
 from utils import init_globals, bb_intersection_over_union
-from segmentation import selective_search_clustered
+from segmentation import selective_search_aggregated, cluster_bboxes
 from multiprocessing import Pool
 
 #GLOBALS
@@ -63,8 +63,9 @@ def calculate_bbox_score_and_save_img(image_path_name, image_save_path, gt_bbox,
                 os.remove(path)
             except:
                 pass
-    candidates = selective_search_clustered(image_path_name)
     img_read = Image.open(image_path_name)
+    width, height = img_read.size[0], img_read.size[1]
+    candidates = cluster_bboxes(selective_search_aggregated(image_path_name), width, height)
     for x, y, w, h in (candidates):
         boxA = gt_bbox
         boxB = (x, y, x+w, y+h)
@@ -81,6 +82,36 @@ def calculate_bbox_score_and_save_img(image_path_name, image_save_path, gt_bbox,
     logging.debug('image_save_path_name {}'.format(image_save_path_name))
     non_blocking_save(img_crop, image_save_path_name)
 
+def generate_dataset_three_heads_from_indexes(indexes):
+    count = -1
+    with open(fashion_dataset_path + '/Anno/list_bbox.txt') as file_bbox:
+        with open(fashion_dataset_path + '/Anno/list_category_img.txt') as file_category:
+            with open(os.path.join(fashion_dataset_path, 'Eval/list_eval_partition.txt')) as file_partition:
+                    with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_img.txt')) as file_attr:
+                        next(file_attr)
+                        next(file_attr)
+                        for line in file_attr:
+                            count += 1
+                            if count not in indexes:
+                                continue
+                            line = line.split()
+                            img_path = line[0]
+                            img_attr = np.array(eval('[' + ','.join(line[1:]) + ']'))
+                            attrs_str = '-'.join(map(str, [x[0] for x in list(np.argwhere(img_attr == 1))]))
+                            img_part = get_second_arg_from_file(img_path, file_partition)
+                            if img_part == 'val':
+                                img_part = 'validation'
+                            img_class_indx = get_second_arg_from_file(img_path, file_category)
+                            img_class = class_names[int(img_class_indx) - 1]
+                            img_gt_bbox = get_gt_bbox_from_file(img_path, file_bbox)
+                            img_type_indx = str(class_cloth_type[img_class])
+                            image_save_path = os.path.join(dataset_path, img_part, img_class)
+                            calculate_bbox_score_and_save_img(os.path.join(fashion_dataset_path, 'Img', img_path),
+                                                              image_save_path, img_gt_bbox, img_type_indx, attrs_str)
+                            logging.info('{} - {}'.format(count, img_path.split('/')[-2] + '_' +
+                                                                 img_path.split('/')[-1].split('.')[0] + '_' +
+                                                          img_type_indx + '_' + attrs_str + '_'+'.jpg'))
+
 def generate_dataset_three_heads(job):
     start, stop = job[0], job[1]
     count = -1
@@ -96,11 +127,13 @@ def generate_dataset_three_heads(job):
                                 continue
                             line = line.split()
                             img_path = line[0]
-                            img_attr = np.array(eval('[' + ','.join(line[1:]) + ']'))
-                            attrs_str = '-'.join(map(str, [x[0] for x in list(np.argwhere(img_attr == 1))]))
                             img_part = get_second_arg_from_file(img_path, file_partition)
+                            if img_part == 'train':# skiping training part
+                                continue
                             if img_part == 'val':
                                 img_part = 'validation'
+                            img_attr = np.array(eval('[' + ','.join(line[1:]) + ']'))
+                            attrs_str = '-'.join(map(str, [x[0] for x in list(np.argwhere(img_attr == 1))]))
                             img_class_indx = get_second_arg_from_file(img_path, file_category)
                             img_class = class_names[int(img_class_indx) - 1]
                             img_gt_bbox = get_gt_bbox_from_file(img_path, file_bbox)
@@ -160,6 +193,77 @@ def select_subset_images_iou(crop_val):
         classes_idx[x] = sorted(classes_idx[x])[:crop_val]
     return [x[1] for y in class_names for x in classes_idx[y]]
 
+def select_subset_images_3heads(crop_train, crop_val):
+    attrs_classes_parts_tuples = []
+    count = -1
+    with open(fashion_dataset_path + '/Anno/list_category_img.txt') as file_category:
+        with open(os.path.join(fashion_dataset_path, 'Eval/list_eval_partition.txt')) as file_partition:
+            with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_img.txt')) as file_attr:
+                next(file_attr)
+                next(file_attr)
+                for line in file_attr:
+                    count += 1
+                    line = line.split()
+                    img_path = line[0]
+                    img_class_indx = get_second_arg_from_file(img_path, file_category)
+                    img_class = class_names[int(img_class_indx) - 1]
+                    img_attr = np.array(eval('[' + ','.join(line[1:]) + ']'))
+                    img_part = get_second_arg_from_file(img_path, file_partition)
+                    img_attrs = [x[0] for x in list(np.argwhere(img_attr == 1))]
+                    attrs_classes_parts_tuples.append((img_attrs,img_class,img_part,count))
+    shuffle(attrs_classes_parts_tuples)
+    ret = dict()
+    for part in ['train', 'val']:
+        crop = eval('crop_'+part)
+        classes_idx = dict(((x, set()) for x in classes35))
+        attrs_idx = dict(((x, set()) for x in attrs200))
+        ret[part] = set()
+
+        for img_attrs, img_class, img_part, count in attrs_classes_parts_tuples:
+            if img_part != part:
+                continue
+            skip = True
+            for x in img_attrs:
+                if x in attrs_idx.keys() and len(attrs_idx[x]) < crop:
+                    skip = False
+                    break
+            if skip:
+                continue
+            for x in img_attrs:
+                if x in attrs_idx.keys():
+                    attrs_idx[x].add(count)
+            if img_class in classes_idx.keys():
+                classes_idx[img_class].add(count)
+            if np.min([len(x) for x in attrs_idx.values()]) == crop:
+                break
+
+        for img_attrs, img_class, img_part, count in attrs_classes_parts_tuples:
+            if img_part != part:
+                continue
+            if img_class not in classes_idx.keys() or len(classes_idx[img_class]) >= crop:
+                continue
+            classes_idx[img_class].add(count)
+            if np.min([len(x) for x in classes_idx.values()]) == crop:
+                break
+
+        for x in classes35:
+            ret[part] = ret[part] | classes_idx[x]
+        for x in attrs200:
+            ret[part] = ret[part] | attrs_idx[x]
+        for x in classes35:
+            logging.info('num samples for {}: {}'.format(x, len(ret[part] & classes_idx[x])))
+        for x in attrs200:
+            logging.info('num samples for {}: {}'.format(x, len(ret[part] & attrs_idx[x])))
+        logging.info('min samples for attr: {}'.format(np.min([len(x) for x in attrs_idx.values()])))
+        logging.info('max samples for attr: {}'.format(np.max([len(x) for x in attrs_idx.values()])))
+        logging.info('min samples for class: {}'.format(np.min([len(x) for x in classes_idx.values()])))
+        logging.info('max samples for class: {}'.format(np.max([len(x) for x in classes_idx.values()])))
+        logging.info('{} samples: {}'.format(part, str(len(ret[part]))))
+        with open(os.path.join(dataset_path,part+'.txt'), 'w') as f:
+            for x in ret[part]:
+                f.write(str(x)+'\n')
+    return (ret['train'], ret['val'])
+
 def generate_dataset_iou(indexes):
     count = -1
     with open(fashion_dataset_path + '/Anno/list_bbox.txt') as file_bbox:
@@ -183,7 +287,7 @@ def generate_dataset_iou(indexes):
                         calculate_bbox_score_and_save_img(os.path.join(fashion_dataset_path, 'Img', img_path), image_save_path, img_gt_bbox)
                         logging.info('{} - {}'.format(count, image_save_path))
 
-global class_names, input_shape, attr_names, class_cloth_type, type_names
+global class_names, input_shape, attr_names, class_cloth_type, type_names, classes35, attrs200
 class_names, input_shape, attr_names = init_globals()
 type_names = ['upper-body', 'lower-body', 'full-body']
 class_cloth_type = dict()
@@ -193,7 +297,8 @@ with open(fashion_dataset_path + 'Anno/list_category_cloth.txt') as f:
     for line in f:
         line = line.split()
         class_cloth_type[line[0]] = int(line[1]) - 1
-
+classes35 = (set(class_names) - set(exclude))
+attrs200 = keep
 if __name__ == '__main__':
     # generate_dataset_gt_bbox_crop()
     # create_category_structure(type_names)
@@ -205,7 +310,9 @@ if __name__ == '__main__':
     # jobs.append(indexes[(num_proc - 1)*b:])
     # p = Pool(num_proc)
     # p.map(generate_dataset_iou, jobs)
-    # create_category_structure(class_names)
+
+    #---------------------3 HEADS WHOLE--------------------------
+    create_category_structure(class_names)
     # with open(fashion_dataset_path + 'Anno/list_category_img.txt') as f:
     #     total_count = int(f.readline())
     # b = total_count // num_proc
@@ -213,9 +320,28 @@ if __name__ == '__main__':
     # for i in range(num_proc - 1):
     #     jobs.append((i*b, (i+1)*b))
     # print(jobs)
-    # # p = Pool(num_proc)
-    # # p.map(generate_dataset_three_heads, jobs)
-    # generate_dataset_three_heads((0,total_count))
+    p = Pool(num_proc)
+    jobs = [(240100, 289222), (23334, 72305), (95870, 144610), (167744, 216915)]
+    p.map(generate_dataset_three_heads, jobs)
+
+    #---------------------3 HEADS CROPPED------------------------------
+    # select_subset_images_3heads(100, 10)
+    # indexes = []
+    # with open(dataset_path+'/train.txt') as f:
+    #     for l in f:
+    #         indexes.append(int(l))
+    # with open(dataset_path + '/val.txt') as f:
+    #     for l in f:
+    #         indexes.append(int(l))
+    # jobs = []
+    # b = len(indexes) // num_proc
+    # for i in range(num_proc - 1):
+    #     jobs.append(indexes[i*b:(i+1)*b])
+    # jobs.append(indexes[(num_proc - 1)*b:])
+    # p = Pool(num_proc)
+    # p.map(generate_dataset_three_heads_from_indexes, jobs)
+    # # generate_dataset_three_heads((0,total_count))
+
     # attr_stat = np.zeros((1000,))
     # with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_img.txt')) as f:
     #     next(f)

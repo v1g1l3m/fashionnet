@@ -60,15 +60,6 @@ def selective_search_aggregated(image_path):
     [bbox_agg.add(y) for x in [2, 25] for y in selective_search_bboxwh(image, rescale=x)]
     return list(bbox_agg)
 
-def selective_search_clustered(image_path):
-    image = skimage.io.imread(image_path)
-    width, height = image.shape[0], image.shape[1]
-    bbox_agg = set()
-    [bbox_agg.add(y) for x in [0.25, 0.8] for y in selective_search_bboxwh(image, sigma=x)]
-    [bbox_agg.add(y) for x in [500, 1500] for y in selective_search_bboxwh(image, scale=x)]
-    [bbox_agg.add(y) for x in [2, 25] for y in selective_search_bboxwh(image, rescale=x)]
-    return cluster_bboxes(bbox_agg, width, height)
-
 def display_seg(image_path, gt_bbox):
     # fig, axes = plt.subplots(2, 3, figsize=(8, 6), frameon=False)
     # xs=[0.25,0.8]
@@ -108,52 +99,68 @@ def display_seg(image_path, gt_bbox):
     #     ax.set_xlabel(str(len(bboxes)))
     #     ax.set_ylabel(str(x))
     #     x, y, w, h = gt_bbox[0], gt_bbox[1], gt_bbox[2] - gt_bbox[0], gt_bbox[3] - gt_bbox[1]
-    #     draw_rect(ax, img, (x, y, w, h), edgecolor='green', linewidth=2)
+    # #     draw_rect(ax, img, (x, y, w, h), edgecolor='green', linewidth=2)
+    # image = skimage.io.imread(image_path)
+    # width, height = image.shape[0], image.shape[1]
+    # bbox_agg = set()
+    # [bbox_agg.add(y) for x in [0.25, 0.8] for y in selective_search_bboxwh(image, sigma=x)]
+    # [bbox_agg.add(y) for x in [500, 1500] for y in selective_search_bboxwh(image, scale=x)]
+    # [bbox_agg.add(y) for x in [2, 25] for y in selective_search_bboxwh(image, rescale=x)]
+
+    # fig2, axes = plt.subplots(2, 4, figsize=(8, 6), frameon=False)
+    # xs = [-0.3,-0.4,-0.5,-0.6]
+    # img1 = Image.open(image_path)
+    # img2 = Image.open(image_path)
+    # for ax1, ax2, z in zip(axes[0],axes[1], xs):
+    #     bboxes_clustered = []
+    #     cluster_colors = []
+    #     X = np.array([[bb[0]/width, bb[1]/height, bb[2]/width, bb[3]/height] for bb in bbox_agg])
+    #     bbox_colors = np.zeros((len(X), 3))
+    #     af = AffinityPropagation(preference=z).fit(X)
+    #     labels = af.labels_
+    #     for cluster in np.unique(labels):
+    #         bboxes_cluster = X[labels == cluster]
+    #         cluster_color = np.random.rand(3, )
+    #         bbox_colors[labels == cluster] = cluster_color
+    #         km = KMeans(n_clusters=1).fit(bboxes_cluster)
+    #         closest, _ = pairwise_distances_argmin_min(km.cluster_centers_, bboxes_cluster)
+    #         centroid = km.cluster_centers_[0]
+    #         bboxes_clustered.append((centroid[0]*width, centroid[1]*height, centroid[2]*width, centroid[3]*height))
+    #         cluster_colors.append(cluster_color)
+    #
+    #     x, y, w, h = gt_bbox[0], gt_bbox[1], gt_bbox[2] - gt_bbox[0], gt_bbox[3] - gt_bbox[1]
+    #     bboxA = (x, y, w, h)
+    #     count = 0
+    #     draw_rect(ax1, img1, (x, y, w, h), edgecolor='green', linewidth=2)
+    #     draw_rect(ax2, img2, (x, y, w, h), edgecolor='green', linewidth=2)
+    #     for i, bbox in enumerate(bboxes_clustered):
+    #         iou = bb_intersection_over_union(bboxA, bbox)
+    #         draw_rect(ax1, img1, bbox, edgecolor='red', linewidth=1,text=str(iou*100)[:2])
+    #         ax1.plot(bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2, c=cluster_colors[i], marker='o')
+    #         if iou > 0.5:
+    #             count += 1
+    #             draw_rect(ax2, img2, bbox, edgecolor='red', linewidth=1,text=str(iou*100)[:2].lstrip('0'))
+    #             ax2.plot(bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2, c=cluster_colors[i], marker='o')
+    #     ax1.set_xlabel(str(len(bboxes_clustered)))
+    #     ax1.set_ylabel(str(z))
+    #     ax2.set_xlabel(str(count))
+    #     ax2.set_ylabel(str(z))
     image = skimage.io.imread(image_path)
     width, height = image.shape[0], image.shape[1]
-    bbox_agg = set()
-    [bbox_agg.add(y) for x in [0.25, 0.8] for y in selective_search_bboxwh(image, sigma=x)]
-    [bbox_agg.add(y) for x in [500, 1500] for y in selective_search_bboxwh(image, scale=x)]
-    [bbox_agg.add(y) for x in [2, 25] for y in selective_search_bboxwh(image, rescale=x)]
-
-    fig2, axes = plt.subplots(2, 4, figsize=(8, 6), frameon=False)
-    xs = [-0.3,-0.4,-0.5,-0.6]
-    img1 = Image.open(image_path)
-    img2 = Image.open(image_path)
-    for ax1, ax2, z in zip(axes[0],axes[1], xs):
-        bboxes_clustered = []
-        cluster_colors = []
-        X = np.array([[bb[0]/width, bb[1]/height, bb[2]/width, bb[3]/height] for bb in bbox_agg])
-        bbox_colors = np.zeros((len(X), 3))
-        af = AffinityPropagation(preference=z).fit(X)
-        labels = af.labels_
-        for cluster in np.unique(labels):
-            bboxes_cluster = X[labels == cluster]
-            cluster_color = np.random.rand(3, )
-            bbox_colors[labels == cluster] = cluster_color
-            km = KMeans(n_clusters=1).fit(bboxes_cluster)
-            closest, _ = pairwise_distances_argmin_min(km.cluster_centers_, bboxes_cluster)
-            centroid = km.cluster_centers_[0]
-            bboxes_clustered.append((centroid[0]*width, centroid[1]*height, centroid[2]*width, centroid[3]*height))
-            cluster_colors.append(cluster_color)
-
-        x, y, w, h = gt_bbox[0], gt_bbox[1], gt_bbox[2] - gt_bbox[0], gt_bbox[3] - gt_bbox[1]
-        bboxA = (x, y, w, h)
-        count = 0
-        draw_rect(ax1, img1, (x, y, w, h), edgecolor='green', linewidth=2)
-        draw_rect(ax2, img2, (x, y, w, h), edgecolor='green', linewidth=2)
-        for i, bbox in enumerate(bboxes_clustered):
-            iou = bb_intersection_over_union(bboxA, bbox)
-            draw_rect(ax1, img1, bbox, edgecolor='red', linewidth=1,text=str(iou*100)[:2])
-            ax1.plot(bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2, c=cluster_colors[i], marker='o')
-            if iou > 0.5:
-                count += 1
-                draw_rect(ax2, img2, bbox, edgecolor='red', linewidth=1,text=str(iou*100)[:2].lstrip('0'))
-                ax2.plot(bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2, c=cluster_colors[i], marker='o')
-        ax1.set_xlabel(str(len(bboxes_clustered)))
-        ax1.set_ylabel(str(z))
-        ax2.set_xlabel(str(count))
-        ax2.set_ylabel(str(z))
+    fig2, axes = plt.subplots(1, 2, figsize=(8, 6), frameon=False)
+    ax1, ax2 = axes[0], axes[1]
+    x, y, w, h = gt_bbox[0], gt_bbox[1], gt_bbox[2] - gt_bbox[0], gt_bbox[3] - gt_bbox[1]
+    bboxes1 = cluster_bboxes(selective_search_aggregated(image_path), width, height)
+    bboxes2 = cluster_bboxes_fast(selective_search_aggregated(image_path), width, height)
+    for i in range(len(bboxes1)):
+        bbox = bboxes1[i]
+        draw_rect(ax1, image, bbox, edgecolor='red', linewidth=1)
+        ax1.plot(bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2, marker='o')
+        bbox = bboxes2[i]
+        draw_rect(ax2, image, bbox, edgecolor='red', linewidth=1)
+        ax2.plot(bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2, marker='o')
+    draw_rect(ax1, image, (x, y, w, h), edgecolor='green', linewidth=2)
+    draw_rect(ax2, image, (x, y, w, h), edgecolor='green', linewidth=2)
     plt.show()
 
 if __name__ == '__main__':
@@ -166,6 +173,18 @@ if __name__ == '__main__':
             line = line.split()
             image_paths.append(os.path.join(prediction_path,line[0]))
             gt_bboxes.append((int(line[2]), int(line[3]), int(line[4]), int(line[5])))
+    import time
+    t1 = time.time()
     for img_path, bbox in zip(image_paths, gt_bboxes):
-        display_seg(img_path, bbox)
-        # selective_search_clustered(img_path, bbox)
+        # display_seg(img_path, bbox)
+        image = skimage.io.imread(img_path)
+        width, height = image.shape[0], image.shape[1]
+        cluster_bboxes(selective_search_aggregated(img_path), width, height)
+    print('{} secs'.format((time.time()-t1)))
+    # t1 = time.time()
+    # for img_path, bbox in zip(image_paths, gt_bboxes):
+    #     # display_seg(img_path, bbox)
+    #     image = skimage.io.imread(img_path)
+    #     width, height = image.shape[0], image.shape[1]
+    #     cluster_bboxes_fast(selective_search_aggregated(img_path), width, height)
+    # print('fast: {} secs'.format((time.time() - t1)))
