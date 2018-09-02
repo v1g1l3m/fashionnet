@@ -1,6 +1,7 @@
 .idea/
 output/
-results/
+results*/
+models/
 __pycache__/
 tensorflow/
 best/

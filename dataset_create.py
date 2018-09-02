@@ -312,17 +312,17 @@ if __name__ == '__main__':
     # p.map(generate_dataset_iou, jobs)
 
     #---------------------3 HEADS WHOLE--------------------------
-    create_category_structure(class_names)
-    # with open(fashion_dataset_path + 'Anno/list_category_img.txt') as f:
-    #     total_count = int(f.readline())
-    # b = total_count // num_proc
-    # jobs = [((num_proc-1)*b, total_count)]
-    # for i in range(num_proc - 1):
-    #     jobs.append((i*b, (i+1)*b))
-    # print(jobs)
-    p = Pool(num_proc)
-    jobs = [(240100, 289222), (23334, 72305), (95870, 144610), (167744, 216915)]
-    p.map(generate_dataset_three_heads, jobs)
+    # create_category_structure(class_names)
+    # # with open(fashion_dataset_path + 'Anno/list_category_img.txt') as f:
+    # #     total_count = int(f.readline())
+    # # b = total_count // num_proc
+    # # jobs = [((num_proc-1)*b, total_count)]
+    # # for i in range(num_proc - 1):
+    # #     jobs.append((i*b, (i+1)*b))
+    # # print(jobs)
+    # p = Pool(num_proc)
+    # jobs = [(240100, 289222), (23334, 72305), (95870, 144610), (167744, 216915)]
+    # p.map(generate_dataset_three_heads, jobs)
 
     #---------------------3 HEADS CROPPED------------------------------
     # select_subset_images_3heads(100, 10)
@@ -355,4 +355,30 @@ if __name__ == '__main__':
     # amounts = [(attr_stat[i], i) for i in range(1000)]
     # b=sorted(amounts, reverse=True)
     # print([x[1] for x in b[:200]])
+
+    #--------------------DeepFashion dataset stats---------------------
+    with open(fashion_dataset_path + 'train.txt', 'w') as f_train:
+        with open(fashion_dataset_path + 'validation.txt', 'w') as f_validation:
+            with open(fashion_dataset_path + 'test.txt', 'w') as f_test:
+                with open(fashion_dataset_path + '/Anno/list_bbox.txt') as file_bbox:
+                    with open(fashion_dataset_path + '/Anno/list_category_img.txt') as file_category:
+                        with open(os.path.join(fashion_dataset_path, 'Eval/list_eval_partition.txt')) as file_partition:
+                            with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_img.txt')) as file_attr:
+                                next(file_attr)
+                                next(file_attr)
+                                for line in file_attr:
+                                    line = line.split()
+                                    img_path = os.path.join(fashion_dataset_path, 'Img', line[0])
+                                    img_attr = np.array(eval('[' + ','.join(line[1:]) + ']'))
+                                    img_attr = '-'.join(map(str, [x[0] for x in list(np.argwhere(img_attr == 1))]))
+                                    if len(img_attr) == 0:
+                                        img_attr = None
+                                    img_class = class_names[int(get_second_arg_from_file(line[0], file_category)) - 1]
+                                    img_gt_bbox = get_gt_bbox_from_file(line[0], file_bbox)
+                                    img_gt_bbox = '-'.join(map(str, img_gt_bbox))
+                                    img_part = get_second_arg_from_file(line[0], file_partition)
+                                    if img_part == 'val':
+                                        img_part = 'validation'
+                                    file_to_write = eval('f_{}'.format(img_part))
+                                    file_to_write.write('{} {} {} {}\n'.format(img_path, img_gt_bbox, img_attr, img_class))
     pass
