@@ -14,7 +14,6 @@ img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
 fashion_dataset_path = '../Data/fashion_data/'
-output_path = 'output/'
 
 ### FUNCTIONS ###
 def init_globals():
@@ -71,8 +70,9 @@ def plot_history(output_path, sep=';'):
     log = pd.DataFrame.from_csv(os.path.join(output_path, 'model_train.csv'), sep=sep)
     losses = [i for i in log.keys() if not i.startswith('val_') and i.endswith('loss')]
     accs = [i for i in log.keys() if not i.startswith('val_') and i.endswith('acc')]
-    plot_history('Accuracy',accs,log)
+    plot_history('Accuracy', accs, log)
     plot_history('Loss', losses, log)
+    plt.show()
     return
 
 def get_image_paths(prediction_path):
@@ -101,6 +101,6 @@ def draw_rect(ax, img, gt_bbox, text=None, textcolor=(0,0,0), edgecolor='red',li
     ax.imshow(img, aspect='equal')
 
 if __name__ == '__main__':
-    plot_history(output_path, sep=' ')
+    plot_history('output/', sep=';')
 
 

@@ -90,9 +90,14 @@ def np_arrays_reader(path):
 
 class Parallel_np_arrays_reader(object):
 
-    def __init__(self, path, maxzise=100):
-        self.q = Queue(maxzise)
+    def __init__(self, path, out_keys, maxsize=100):
+        self.q = Queue(maxsize)
         self.path = path
+        self.out_keys = out_keys
+        self.np_arrays_path_list = []
+        with open(self.path) as f:
+            for btl_name in f:
+                self.np_arrays_path_list.append(btl_name.rstrip())
         self.p = Process(target=self.write_to_queue)
         self.p.start()
 
@@ -101,10 +106,19 @@ class Parallel_np_arrays_reader(object):
 
     def write_to_queue(self):
         while True:
-            with open(self.path) as f:
-                for btl_name in f:
-                    temp = np.load(open(btl_name.rstrip(), 'rb'))
-                    self.q.put((temp['btl'], [temp['cls'], temp['attr']]))
+            shuffle(self.np_arrays_path_list)
+            for btl_name in self.np_arrays_path_list:
+                temp = np.load(open(btl_name, 'rb'))
+                if len(self.out_keys) == 1:
+                    out = temp[self.out_keys[0]]
+                else:
+                    out= []
+                    for key in self.out_keys:
+                        if key == None:
+                            out.append(key)
+                        else:
+                            out.append(temp[key])
+                self.q.put((temp['btl'], out))
 
     def next(self):
         return self.q.get()

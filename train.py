@@ -1,5 +1,6 @@
 import os
 import datetime
+import time
 from PIL import Image
 from keras.optimizers import *
 from keras.models import Model
@@ -7,7 +8,7 @@ from keras.models import model_from_json
 from keras.layers import *
 from keras.callbacks import ModelCheckpoint, CSVLogger, TensorBoard, EarlyStopping
 from keras.applications.vgg16 import preprocess_input, VGG16
-from keras.utils import to_categorical
+from keras.utils import to_categorical, plot_model
 from sklearn.utils import class_weight
 from generator import *
 from utils import init_globals, plot_history
@@ -15,68 +16,25 @@ import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
 ### GLOBALS
-epochs = 100
+epochs = 150
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
 output_path = 'output/'
 fashion_dataset_path = '../Data/fashion_data/'
-dataset_path = '../Data/dataset_df_all'
+dataset_path = '../Data/dataset_3heads100'
 dataset_train_path = os.path.join(dataset_path, 'train')
 dataset_val_path = os.path.join(dataset_path, 'validation')
 dataset_test_path = os.path.join(dataset_path, 'test')
-btl_path = 'E:\\ML\\bottleneck_df_all'
+btl_path = 'E:\\ML\\bottleneck_df'
 btl_train_path = os.path.join(btl_path, 'train')
 btl_val_path = os.path.join(btl_path, 'validation')
 btl_test_path = os.path.join(btl_path, 'test')
-#
-# def get_optimizer(optimizer='Adagrad', lr=None, decay=0.0, momentum=0.0):
-#
-#     if optimizer == 'SGD':
-#         if lr is None:
-#             lr = 0.01
-#         optimizer_mod = keras.optimizers.SGD(lr=lr, momentum=momentum, decay=decay, nesterov=False)
-#
-#     elif optimizer == 'RMSprop':
-#         if lr is None:
-#             lr = 0.001
-#         optimizer_mod = keras.optimizers.RMSprop(lr=lr, rho=0.9, epsilon=1e-08, decay=decay)
-#
-#     elif optimizer == 'Adagrad':
-#         if lr is None:
-#             lr = 0.01
-#         optimizer_mod = keras.optimizers.Adagrad(lr=lr, epsilon=1e-08, decay=decay)
-#
-#     elif optimizer == 'Adadelta':
-#         if lr is None:
-#             lr = 1.0
-#         optimizer_mod = keras.optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=1e-08, decay=0.0)
-#
-#     elif optimizer == 'Adam':
-#         if lr is None:
-#             lr = 0.001
-#         optimizer_mod = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-#
-#     elif optimizer == 'Adamax':
-#         if lr is None:
-#             lr = 0.002
-#         optimizer_mod = keras.optimizers.Adamax(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-#
-#     elif optimizer == 'Nadam':
-#         if lr is None:
-#             lr = 0.002
-#         optimizer_mod = keras.optimizers.Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
-#     else:
-#         logging.error('Unknown optimizer {}'.format(optimizer))
-#         exit(1)
-#     logging.debug('lr {}'.format(lr))
-#     logging.debug('optimizer_mod {}'.format(optimizer_mod))
-#     return optimizer_mod, lr
 
 def create_model(is_input_bottleneck, input_shape):
 
     if is_input_bottleneck is True:
-        model_inputs = Input(shape=(input_shape), name='input_cls_attr')
+        model_inputs = Input(shape=(input_shape), name='input_vgg16')
         common_inputs = model_inputs
     # Predict
     else:
@@ -85,26 +43,41 @@ def create_model(is_input_bottleneck, input_shape):
         model_inputs = base_model.input
         common_inputs = base_model.output
 
+    input_flatten = Flatten()(common_inputs)
+
     ## Classes
-    x = Flatten(name='flatten_cls')(common_inputs)
-    x = Dense(256, activation='tanh', name='dense_1_cls')(x)
+    x = Dense(256, activation='tanh', name='dense_1_cls')(input_flatten)
     x = Dropout(0.5, name='drop_1_cls')(x)
-    x = Dense(1024, activation='tanh', name='dense_2_cls')(x)
-    x = Dropout(0.5, name='drop_2_cls')(x)
-    predictions_class = Dense(len(class_names), activation='softmax', name='predictions_class')(x)
+    head_cls = Dense(256, activation='tanh', name='dense_2_cls')(x)
+    x = Dropout(0.5, name='drop_2_cls')(head_cls)
+    predictions_class = Dense(len(class35), activation='softmax', name='predictions_class')(x)
+
+    # Bboxes
+    x = Dense(256, activation='tanh', name='dense_1_bbox')(input_flatten)
+    x = Dropout(0.5, name='drop_1_bbox')(x)
+    head_bbox = Dense(256, activation='tanh', name='dense_2_bbox')(x)
+    x = Dropout(0.5, name='drop_2_bbox')(head_bbox)
+    predictions_bbox = Dense(4, activation='sigmoid', name='predictions_bbox')(x)
 
     # Attributes
-    x = Flatten(name='flatten_attr')(common_inputs)
-    x = Dense(256, activation='tanh', name='dense_1_attr')(x)
-    x = Dropout(0.5, name='drop_1_attr')(x)
-    x = Dense(2048, activation='tanh', name='dense_2_attr')(x)
+    head_attr = Dense(256, activation='tanh', name='dense_1_attr')(input_flatten)
+    # x = Dropout(0.5, name='drop_1_attr')(x)
+    # head_attr = Dense(256, activation='tanh', name='dense_2_attr')(x)
+    merge_layer = concatenate([head_bbox, head_attr, head_cls])
+    x = Dropout(0.5, name='drop_merge')(merge_layer)
+    x = Dense(768, activation='tanh', name='dense_2_attr')(x)
     x = Dropout(0.5, name='drop_2_attr')(x)
-    predictions_attr = Dense(len(attr_names), activation='sigmoid', name='predictions_attr')(x)
+    predictions_attr = Dense(len(attr200), activation='sigmoid', name='predictions_attr')(x)
+
+    # # BboxOrNotBbox
+    # x = Dense(256, activation='tanh', name='dense_1_bnb')(dropout_after_merge)
+    # x = Dropout(0.5, name='drop_1_bnb')(x)
+    # head_bnb = Dense(256, activation='tanh', name='dense_2_bnb')(x)
+    # x = Dropout(0.5, name='drop_2_bnb')(head_bnb)
+    # predictions_bnb = Dense(1, activation='sigmoid', name='predictions_bnb')(x)
 
     ## Create Model
-    # model = Model(inputs=model_inputs, outputs=[predictions_class, predictions_iou])
-    # model = Model(inputs=model_inputs, outputs=predictions_iou)
-    model = Model(inputs=model_inputs, outputs=[predictions_class, predictions_attr])
+    model = Model(inputs=model_inputs, outputs=[predictions_bbox, predictions_attr, predictions_class])
     if is_input_bottleneck is False:
         for layer in model.layers[:19]:
             layer.trainable = False
@@ -112,44 +85,47 @@ def create_model(is_input_bottleneck, input_shape):
     return model
 
 def train_model(batch_size):
-    train_labels_class = []
-    train_labels_attr = []
-    with open(os.path.join(btl_path, 'btl_train.txt')) as f:
-        for name in f:
-            train_labels_class.append(class_names.index(name.split()[1]))
-            if len(name.split()) == 3:
-                for i in list(map(int, name.split()[2].split('-'))):
-                    train_labels_attr.append(i)
-    train_labels_class = np.array(train_labels_class)
-    train_labels_attr = np.array(train_labels_attr)
-
-    with open(os.path.join(btl_path, 'btl_validation.txt')) as f:
-        for i, l in enumerate(f):
-            pass
-    val_data_len = i + 1
+    # train_labels_class = []
+    # train_labels_attr = []
+    # with open(os.path.join(btl_path, 'btl_train.txt')) as f:
+    #     for name in f:
+    #         train_labels_class.append(class_names.index(name.split()[1]))
+    #         if len(name.split()) == 3:
+    #             for i in list(map(int, name.split()[2].split('-'))):
+    #                 train_labels_attr.append(i)
+    # train_labels_class = np.array(train_labels_class)
+    # train_labels_attr = np.array(train_labels_attr)
+    #
+    # with open(os.path.join(btl_path, 'btl_validation.txt')) as f:
+    #     for i, l in enumerate(f):
+    #         pass
+    # val_data_len = i + 1
 
     ## Build network
     ## Register Callbacks
     log_path = os.path.join(output_path, 'model_train.csv')
     csv_log = CSVLogger(log_path , separator=';', append=False)
     early_stopping = EarlyStopping(
-        monitor='val_loss', patience=5, verbose=1, mode='min')
-    #filepath = "output/best-weights-{epoch:03d}-{loss:.4f}-{acc:.4f}.hdf5"
-    filepath = os.path.join(output_path, 'best-weights-{epoch:03d}-{val_loss:.4f}-{val_acc:.4f}.hdf5')
+        monitor='val_loss', patience=10, verbose=1, mode='min')
+    filepath = "output/best-weights-{epoch:03d}-{loss:.4f}-{val_loss:.4f}.hdf5"
+    # filepath = os.path.join(output_path, 'best-weights-{epoch:03d}-{val_loss:.4f}-{val_acc:.4f}.hdf5')
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1,
-                                 save_best_only=True, save_weights_only=False, mode='auto', period=1)
+                                 save_best_only=True, save_weights_only=False, mode='auto', period=3)
     callbacks_list = [csv_log, early_stopping, checkpoint]
     # class_weight_val = class_weight.compute_class_weight('balanced', np.unique(train_labels_class), train_labels_class)
     # attr_weight_val = class_weight.compute_class_weight('balanced', np.unique(train_labels_attr), train_labels_attr)
-    input_shape = (img_width, img_height, img_channel)
+    # input_shape = (img_width, img_height, img_channel)
     input_shape = (7, 7, 512)
     # model = create_model(is_input_bottleneck=True, is_load_weights=False, input_shape, optimizer, learn_rate, decay, momentum, activation, dropout_rate)
     model = create_model(True, input_shape)
     with open(os.path.join(output_path, 'bottleneck_fc_model.json'), 'w') as f:
         f.write(model.to_json())
+    plot_model(model, to_file=os.path.join(output_path, 'model.png'))
     ## Compile
     model.compile(optimizer=RMSprop(lr=1e-4),
-                  loss={'predictions_class': 'categorical_crossentropy', 'predictions_attr': 'binary_crossentropy'},
+                  loss={'predictions_bbox':'mse', 'predictions_attr': 'binary_crossentropy',
+                        'predictions_class': 'categorical_crossentropy'},
+                  # loss_weights=[0.3,0.4,0.3,None],
                   metrics=['accuracy'])
     # train_gen = np_arrays_reader(os.path.join(btl_path, 'btl_train_npz.txt'))
     # val_gen = np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz.txt'))
@@ -161,14 +137,16 @@ def train_model(batch_size):
     #     val_lbls.append(temp['iou'])    # #
     # val_data = np.array(val_data)
     # val_lbls = np.array(val_lbls)
+    logging.info('bottleneck path: {}'.format( btl_path))
+    logging.info('output path: {}'.format(output_path))
     t_begin = datetime.datetime.now()
-    with Parallel_np_arrays_reader(os.path.join(btl_path, 'btl_train_npz.txt'), 100) as train_gen:
-        with Parallel_np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz.txt'), 50) as val_gen:
-            model.fit_generator(train_gen,
-                                    steps_per_epoch=len(train_labels_class) // batch_size,
+    with Parallel_np_arrays_reader(os.path.join(btl_path, 'btl_train_npz.txt'), ['bb', 'attr', 'cls'], maxsize=340) as train_gen:
+        with Parallel_np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz82.txt'),['bb', 'attr', 'cls'], maxsize=100) as val_gen:
+            # time.sleep(100)
+            model.fit_generator(train_gen, steps_per_epoch=328,
                                     epochs=epochs,
                                     validation_data=val_gen,
-                                    validation_steps=val_data_len // batch_size,
+                                    validation_steps=82,
                                     # class_weight=[class_weight_val, attr_weight_val],
                                     # use_multiprocessing=True,
                                     callbacks=callbacks_list)
@@ -178,9 +156,29 @@ def train_model(batch_size):
     print('total_time: {}'.format(str(datetime.datetime.now() - t_begin)))
     # TODO: These are not the best weights
     model.save_weights(os.path.join(output_path, 'bottleneck_fc_model.h5'))
-    plot_history(log_path)
+    plot_history(output_path)
 ### MAIN ###
 if __name__ == '__main__':
-    global class_names, input_shape, attr_names
+    if os.path.exists(output_path):
+        i = 1
+        while os.path.exists(output_path):
+            output_path = 'output%d/' % i
+            i += 1
+        os.makedirs(output_path)
+    global class_names, input_shape, attr_names, class35, attr200
     class_names, input_shape, attr_names = init_globals()
-    train_model(256)
+    class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
+               'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie',
+               'Blouse', 'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel',
+               'Sweatshorts', 'Jumpsuit', 'Poncho', 'Trunks', 'Sweater', 'Robe']
+    attr200 = [730, 365, 513, 495, 836, 596, 822, 254, 884, 142, 212, 883, 837, 892, 380, 353, 196, 546, 335, 162, 441,
+               717, 760, 568, 310, 705, 745, 81, 226, 830, 620, 577, 1, 640, 956, 181, 831, 720, 601, 112, 820, 935,
+               969, 358, 933, 983, 616, 292, 878, 818, 337, 121, 236, 470, 781, 282, 913, 93, 227, 698, 268, 61, 681,
+               713, 239, 839, 722, 204, 457, 823, 695, 993, 0, 881, 817, 571, 565, 770, 751, 692, 593, 825, 574, 50,
+               207, 186, 237, 563, 300, 453, 897, 944, 438, 688, 413, 409, 984, 191, 697, 368, 133, 676, 11, 754, 800,
+               83, 14, 786, 141, 841, 415, 608, 276, 998, 99, 851, 429, 287, 815, 437, 747, 44, 988, 249, 543, 560, 653,
+               843, 208, 899, 321, 115, 887, 699, 15, 764, 48, 749, 852, 811, 862, 392, 937, 87, 986, 129, 336, 689,
+               245, 911, 309, 775, 638, 184, 797, 512, 45, 682, 139, 306, 880, 231, 802, 264, 648, 410, 30, 356, 531,
+               982, 116, 599, 774, 900, 218, 70, 562, 108, 25, 450, 785, 877, 18, 42, 624, 716, 36, 920, 423, 784, 788,
+               538, 325, 958, 480, 20, 38, 931, 666, 561]
+    train_model(64)
