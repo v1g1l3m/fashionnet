@@ -11,7 +11,7 @@ from skimage import exposure
 import PIL
 from PIL import Image
 from utils import init_globals, bb_intersection_over_union
-from segmentation import selective_search_aggregated, cluster_bboxes
+from segmentation import selective_search_bbox_fast, cluster_bboxes
 from multiprocessing import Pool
 
 #GLOBALS
@@ -65,7 +65,7 @@ def calculate_bbox_score_and_save_img(image_path_name, image_save_path, gt_bbox,
                 pass
     img_read = Image.open(image_path_name)
     width, height = img_read.size[0], img_read.size[1]
-    candidates = cluster_bboxes(selective_search_aggregated(image_path_name), width, height)
+    candidates = cluster_bboxes(selective_search_bbox_fast(np.array(img_read), int((width * height) / 50)), width, height, preference=-0.35, fast=True)
     for x, y, w, h in (candidates):
         boxA = gt_bbox
         boxB = (x, y, x+w, y+h)
@@ -128,7 +128,7 @@ def generate_dataset_three_heads(job):
                             line = line.split()
                             img_path = line[0]
                             img_part = get_second_arg_from_file(img_path, file_partition)
-                            if img_part == 'train':# skiping training part
+                            if img_part != 'train':# only training part
                                 continue
                             if img_part == 'val':
                                 img_part = 'validation'
@@ -141,9 +141,9 @@ def generate_dataset_three_heads(job):
                             image_save_path = os.path.join(dataset_path, img_part, img_class)
                             calculate_bbox_score_and_save_img(os.path.join(fashion_dataset_path, 'Img', img_path),
                                                               image_save_path, img_gt_bbox, img_type_indx, attrs_str)
-                            logging.info('{} - {}'.format(count, img_path.split('/')[-2] + '_' +
+                            logging.info('{} - {} - {}'.format(count, img_path.split('/')[-2] + '_' +
                                                                  img_path.split('/')[-1].split('.')[0] + '_' +
-                                                          img_type_indx + '_' + attrs_str + '_'+'.jpg'))
+                                                          img_type_indx + '_' + attrs_str + '_'+'.jpg', image_save_path))
 
 def generate_dataset_gt_bbox_crop():
     count = -1
