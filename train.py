@@ -1,4 +1,5 @@
 import os
+import sys
 import datetime
 import time
 import pickle
@@ -116,16 +117,6 @@ def train_model(batch_size):
                         'predictions_class': 'categorical_crossentropy'},
                   # loss_weights=[0.3,100,0.3],
                   metrics=['accuracy'])
-    # train_gen = np_arrays_reader(os.path.join(btl_path, 'btl_train_npz.txt'))
-    # val_gen = np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz.txt'))
-    # val_data = []
-    # val_lbls = []
-    # for btl_name in sorted(glob.glob(btl_val_path + '/*.npz')):
-    #     temp = np.load(open(btl_name, 'rb'))
-    #     val_data.append(temp['btl'])
-    #     val_lbls.append(temp['iou'])    # #
-    # val_data = np.array(val_data)
-    # val_lbls = np.array(val_lbls)
     logging.info('bottleneck path: {}'.format( btl_path))
     logging.info('output path: {}'.format(output_path))
     t_begin = datetime.datetime.now()
@@ -139,8 +130,6 @@ def train_model(batch_size):
                                     class_weight=[[1.,1.,1.,1.], attr_weight, cls_weight],
                                     # use_multiprocessing=True,
                                     callbacks=callbacks_list)
-									# predictions_attr_acc predictions_attr_loss val_predictions_attr_acc val_predictions_attr_loss
-									# predictions_class_acc predictions_class_loss val_predictions_class_acc val_predictions_class_loss
     print(datetime.datetime.now())
     print('total_time: {}'.format(str(datetime.datetime.now() - t_begin)))
     print('model saved to: {}'.format(output_path))
@@ -150,12 +139,15 @@ def train_model(batch_size):
     plot_history(output_path)
 ### MAIN ###
 if __name__ == '__main__':
-    if os.path.exists(output_path):
-        i = 1
-        while os.path.exists(output_path):
-            output_path = 'output%d/' % i
-            i += 1
-        os.makedirs(output_path)
+    if len(sys.argv) == 2:
+        output_path = sys.argv[1]
+    else:
+        if os.path.exists(output_path):
+            i = 1
+            while os.path.exists(output_path):
+                output_path = 'output%d/' % i
+                i += 1
+            os.makedirs(output_path)
     global class_names, input_shape, attr_names, class35, attr200
     class_names, input_shape, attr_names = init_globals()
     class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',

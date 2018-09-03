@@ -19,6 +19,7 @@ if len(sys.argv) == 2:
     model_path = sys.argv[1]
     print(model_path)
 fashion_dataset_path='../Data/fashion_data/'
+btl_path = 'E:\\ML\\bottleneck_df'
 
 class_names, _, attr_names = init_globals()
 class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
@@ -45,6 +46,14 @@ model = load_model(os.path.join(model_path, 'best-weights.hdf5'))
 
 X = np.load(os.path.join(fashion_dataset_path, 'btl_test10.npz'))
 bboxes, attrs, classes = model.predict(X['btl'])
+with open(os.path.join(btl_path, 'attr_data_train.pkl'), 'rb') as f:
+    train_labels_attr = pickle.load(f)
+with open(os.path.join(btl_path, 'class_data_train.pkl'), 'rb') as f:
+    train_labels_class = pickle.load(f)
+cls_weight = class_weight.compute_class_weight('balanced', class35, train_labels_class)
+attr_weight = class_weight.compute_class_weight('balanced', attr200, train_labels_attr)
+out_weights = [[1.,1.,1.,1.], attr_weight, cls_weight]
+
 class_er = dict((x, 0) for x in range(len(class35)))
 class_wrong_pred = dict((x, 0) for x in range(len(class35)))
 class_total = dict((x, 0) for x in range(len(class35)))
@@ -85,17 +94,17 @@ attr_acc = np.array([(attr_total[x] - attr_er[x])/attr_total[x] for x in range(l
 attr_total_wrong_pred = sum(attr_wrong_pred)
 
 with open(os.path.join(model_path, 'test_results.txt'), 'w') as f:
-    print('Test samples number: ', len(bbox_iou))
+    # print('Test samples number: ', len(bbox_iou))
     f.write('Test samples number: {}\n'.format(len(bbox_iou)))
-    print('Total wrong predictions for class: ', class_total_wrong_pred)
+    # print('Total wrong predictions for class: ', class_total_wrong_pred)
     f.write('Total wrong predictions for class: {}\n'.format(class_total_wrong_pred))
-    print('Total wrong predictions for attributes: ', attr_total_wrong_pred)
+    # print('Total wrong predictions for attributes: ', attr_total_wrong_pred)
     f.write('Total wrong predictions for attributes: {}\n'.format(attr_total_wrong_pred))
-    print('bbox iou average: ', np.mean(bbox_iou))
+    # print('bbox iou average: ', np.mean(bbox_iou))
     f.write('bbox iou average: {}\n'.format(np.mean(bbox_iou)))
-    print('Class prediction accuracy: ', np.mean(cls_acc)*100)
+    # print('Class prediction accuracy: ', np.mean(cls_acc)*100)
     f.write('Class prediction accuracy: {}\n'.format(np.mean(cls_acc)*100))
-    print('Attribute prediction accuracy: ', np.mean(attr_acc)*100)
+    # print('Attribute prediction accuracy: ', np.mean(attr_acc)*100)
     f.write('Attribute prediction accuracy: {}\n'.format(np.mean(attr_acc)*100))
     for i, cls in enumerate(class35):
         print('{}% Total of class {}: {}, missed: {}, wrong predictions: {}'.format('%.2f'%(cls_acc[i]*100), cls, class_total[i], class_er[i], (class_wrong_pred[i]*100)/class_total_wrong_pred))
@@ -117,4 +126,6 @@ with open(os.path.join(model_path, 'test_results.txt'), 'w') as f:
     # f.write('Class prediction accuracy: {}\n'.format(np.mean(cls_acc)*100))
     print('Attribute prediction accuracy: ', np.mean(attr_acc)*100)
     # f.write('Attribute prediction accuracy: {}\n'.format(np.mean(attr_acc)*100))   
+    ret = model.evaluate(X['btl'], [X['bbwh'][:,:4], X['attr'], X['cls']])
+    print('metrics_names: ', model.metrics_names,'evaluate: ', ret)
     
