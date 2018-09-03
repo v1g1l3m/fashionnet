@@ -1,6 +1,6 @@
 .idea/
-output/
-results*/
+output*/
+results/
 models/
 __pycache__/
 tensorflow/

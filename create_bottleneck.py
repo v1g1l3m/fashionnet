@@ -321,30 +321,33 @@ if __name__ == '__main__':
     test = set()
     classes_idx = dict((x, set()) for x in range(len(class35)))
     attrs_idx = dict((x, set()) for x in range(len(attr200)))
-    smaller_img_path_bbox_attr_cls_tuples_list = []
+    # smaller_img_path_bbox_attr_cls_tuples_list = []
     for i, tup in enumerate(img_path_bbox_attr_cls_tuples_list):
         path, bbox, attrs, cls = tup[0], tup[1], tup[2], tup[3]
         for x in np.argwhere(attrs==1):
             if len(attrs_idx[x[0]]) < crop:
                 attrs_idx[x[0]].add(i)
-                smaller_img_path_bbox_attr_cls_tuples_list.append((path, bbox, attrs, cls))
+                # smaller_img_path_bbox_attr_cls_tuples_list.append((path, bbox, attrs, cls))
         for x in np.argwhere(cls == 1):
             if len(classes_idx[x[0]]) < crop:
                 classes_idx[x[0]].add(i)
-                smaller_img_path_bbox_attr_cls_tuples_list.append((path, bbox, attrs, cls))
-
-    print(len(smaller_img_path_bbox_attr_cls_tuples_list))
+                # smaller_img_path_bbox_attr_cls_tuples_list.append((path, bbox, attrs, cls))
+    [test.add(y) for x in attrs_idx.values() for y in x]
+    [test.add(y) for x in classes_idx.values() for y in x]
+    print(len(test))
     images_list = []
     class_1_hot_list = []
     attrs_1_hot_list = []
     bbox_list = []
-    for path, bbox, attrs, cls in smaller_img_path_bbox_attr_cls_tuples_list:
+    for idx in test:
+        tup = img_path_bbox_attr_cls_tuples_list[idx]
+        path, bbox, attrs, cls = tup[0], tup[1], tup[2], tup[3]
         img = Image.open(path)
         w, h = img.size[0], img.size[1]
         img = img.resize((img_width, img_height))
         img = np.array(img).astype(np.float32)
         images_list.append(img)
-        bbox_list.append([bbox[0]/w, bbox[1]/h, bbox[2]/w, bbox[3]/h])
+        bbox_list.append([bbox[0]/w, bbox[1]/h, bbox[2]/w, bbox[3]/h, w, h])
         attrs_1_hot_list.append(attrs)
         class_1_hot_list.append(cls)
     images_list = preprocess_input(np.array(images_list))
@@ -356,4 +359,4 @@ if __name__ == '__main__':
     model = VGG16(include_top=False, weights='imagenet', input_shape=input_shape)
     bottleneck_features_train_class = model.predict(images_list)
     np.savez(open(os.path.join(fashion_dataset_path, 'btl_test%d.npz' % crop), 'wb'), btl=bottleneck_features_train_class,
-             cls=class_1_hot_list, attr=attrs_1_hot_list, bb=bbox_list)
+             cls=class_1_hot_list, attr=attrs_1_hot_list, bbwh=bbox_list)

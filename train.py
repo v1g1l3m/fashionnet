@@ -8,7 +8,7 @@ from keras.models import model_from_json
 from keras.layers import *
 from keras.callbacks import ModelCheckpoint, CSVLogger, TensorBoard, EarlyStopping
 from keras.applications.vgg16 import preprocess_input, VGG16
-from keras.utils import to_categorical, plot_model
+from keras.utils import plot_model
 from sklearn.utils import class_weight
 from generator import *
 from utils import init_globals, plot_history
@@ -16,7 +16,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
 ### GLOBALS
-epochs = 150
+epochs = 200
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
@@ -65,7 +65,7 @@ def create_model(is_input_bottleneck, input_shape):
     # head_attr = Dense(256, activation='tanh', name='dense_2_attr')(x)
     merge_layer = concatenate([head_bbox, head_attr, head_cls])
     x = Dropout(0.5, name='drop_merge')(merge_layer)
-    x = Dense(768, activation='tanh', name='dense_2_attr')(x)
+    x = Dense(256, activation='tanh', name='dense_2_attr')(x)
     x = Dropout(0.5, name='drop_2_attr')(x)
     predictions_attr = Dense(len(attr200), activation='sigmoid', name='predictions_attr')(x)
 
@@ -81,7 +81,7 @@ def create_model(is_input_bottleneck, input_shape):
     if is_input_bottleneck is False:
         for layer in model.layers[:19]:
             layer.trainable = False
-    logging.info('summary:{}'.format(model.summary()))
+    # logging.info('summary:{}'.format(model.summary()))
     return model
 
 def train_model(batch_size):
@@ -106,8 +106,8 @@ def train_model(batch_size):
     log_path = os.path.join(output_path, 'model_train.csv')
     csv_log = CSVLogger(log_path , separator=';', append=False)
     early_stopping = EarlyStopping(
-        monitor='val_loss', patience=10, verbose=1, mode='min')
-    filepath = "output/best-weights-{epoch:03d}-{loss:.4f}-{val_loss:.4f}.hdf5"
+        monitor='val_predictions_class_loss', patience=20, verbose=1, mode='min')
+    filepath = os.path.join(output_path, "best-weights-{epoch:03d}-{loss:.4f}-{val_loss:.4f}.hdf5")
     # filepath = os.path.join(output_path, 'best-weights-{epoch:03d}-{val_loss:.4f}-{val_acc:.4f}.hdf5')
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1,
                                  save_best_only=True, save_weights_only=False, mode='auto', period=3)
@@ -120,12 +120,12 @@ def train_model(batch_size):
     model = create_model(True, input_shape)
     with open(os.path.join(output_path, 'bottleneck_fc_model.json'), 'w') as f:
         f.write(model.to_json())
-    plot_model(model, to_file=os.path.join(output_path, 'model.png'))
+    plot_model(model, to_file=os.path.join(output_path, 'model.png'), show_shapes=True, show_layer_names=False)
     ## Compile
     model.compile(optimizer=RMSprop(lr=1e-4),
                   loss={'predictions_bbox':'mse', 'predictions_attr': 'binary_crossentropy',
                         'predictions_class': 'categorical_crossentropy'},
-                  # loss_weights=[0.3,0.4,0.3,None],
+                  # loss_weights=[0.3,100,0.3],
                   metrics=['accuracy'])
     # train_gen = np_arrays_reader(os.path.join(btl_path, 'btl_train_npz.txt'))
     # val_gen = np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz.txt'))
@@ -155,7 +155,8 @@ def train_model(batch_size):
     print(datetime.datetime.now())
     print('total_time: {}'.format(str(datetime.datetime.now() - t_begin)))
     # TODO: These are not the best weights
-    model.save_weights(os.path.join(output_path, 'bottleneck_fc_model.h5'))
+    model.save(os.path.join(output_path, 'final_model.h5'))
+    model.save_weights(os.path.join(output_path, 'final_weights.hdf5'))
     plot_history(output_path)
 ### MAIN ###
 if __name__ == '__main__':

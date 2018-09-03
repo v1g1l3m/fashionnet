@@ -1,4 +1,32 @@
 FashionNet History
-1) Merge1 17:00
+
+1) Merge1 02.0917:00
 total_time: 1:08:58.874712
-2) Merge2 21:30
+Test samples number: 1314
+Total wrong predictions for class: 595
+Total wrong predictions for attributes: 19900
+bbox iou average: 0.03635362535715103
+Class prediction accuracy: 25.083072749990762
+Attribute prediction accuracy: 1.139607156387146
+
+2) Merge2 02.09 21:30
+total_time: 1:15:20.305424
+Test samples number: 1314
+Total wrong predictions for class: 595
+Total wrong predictions for attributes: 19900
+bbox iou average: 0.040166642516851425
+Class prediction accuracy: 26.701650364342882
+Attribute prediction accuracy: 0.7266915670792831
+
+3)Merge2 improve classes and loss_weights 03.09 1:07
+total_time: 0:42:19.041858
+Test samples number: 1314
+Total wrong predictions for class: 595
+Total wrong predictions for attributes: 19900
+bbox iou average: 0.02401743270456791
+Class prediction accuracy: 19.820815252841815
+Attribute prediction accuracy: 0.7915542258070848
+
+4)Merge4 layers size reduced 03.09 10:04
+
+
