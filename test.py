@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import pickle
 import numpy as np
 from keras.models import model_from_json, load_model
 from keras.utils import plot_model
+from sklearn.utils import class_weight
 from keras.optimizers import *
 import matplotlib.pyplot as plt
-from utils import init_globals, bb_intersection_over_union
+from utils import init_globals, bb_intersection_over_union, draw_rect
 import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
@@ -14,8 +16,8 @@ logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ]
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
-model_path = 'output/'
-if len(sys.argv) == 2:
+model_path = 'output5/'
+if len(sys.argv) > 1:
     model_path = sys.argv[1]
     print(model_path)
 fashion_dataset_path='../Data/fashion_data/'
@@ -37,7 +39,11 @@ attr200 = [730, 365, 513, 495, 836, 596, 822, 254, 884, 142, 212, 883, 837, 892,
            562, 108, 25, 450, 785, 877, 18, 42, 624, 716, 36, 920, 423, 784, 788, 538, 325, 958, 480, 20, 38, 931, 666,
            561]
 
-model = load_model(os.path.join(model_path, 'best-weights.hdf5'))
+model_name = 'final_model.h5'    
+if len(sys.argv) > 2:
+    if (sys.argv[2] == 'b'):
+        model_name = 'best-weights.hdf5'  
+model = load_model(os.path.join(model_path, model_name))
 # plot_model(model, to_file=os.path.join(model_path, 'model.png'), show_shapes=True, show_layer_names=False)
 # with open('output/bottleneck_fc_model.json') as f:
 #     model = model_from_json(f.read())
@@ -64,9 +70,15 @@ bbox_iou = []
 for i, bbwh in enumerate(X['bbwh']):
     w, h = bbwh[4], bbwh[5]
     bb_act = [bbwh[0]*w, bbwh[1]*h, bbwh[2]*w, bbwh[3]*h]
-    bb_pred = [bboxes[0]*w, bboxes[1]*h, bboxes[2]*w, bboxes[3]*h]
+    bb_pred = [bboxes[i][0]*w, bboxes[i][1]*h, bboxes[i][2]*w, bboxes[i][3]*h]
     bbox_iou.append(bb_intersection_over_union(bb_act, bb_pred))
+    # img = np.zeros((int(w),int(h),3), dtype=np.int8)
+    # ax = plt.subplot()
+    # draw_rect(ax, img, bb_act, edgecolor='green')
+    # draw_rect(ax, img, bb_pred, edgecolor='red')
+    # plt.show()
 for i, cls in enumerate(X['cls']):
+    class_total[np.argmax(cls)] += 1
     pred = classes[i]
     test = np.max(cls)
     if test < 1e-7 and np.max(pred) >= 0.5:
@@ -75,7 +87,6 @@ for i, cls in enumerate(X['cls']):
     if np.argmax(cls) != np.argmax(pred):
         class_er[np.argmax(cls)] += 1
         class_wrong_pred[np.argmax(pred)] += 1
-    class_total[np.argmax(cls)] += 1
 
 for i, attr in enumerate(X['attr']):
     pred = set([x[0] for x in np.argwhere(attrs[i] >= 0.5)])
@@ -89,9 +100,9 @@ for i, attr in enumerate(X['attr']):
     for j in wrong:
         attr_wrong_pred[j] += 1
 cls_acc = np.array([(class_total[x] - class_er[x])/class_total[x] for x in range(len(class35))])
-class_total_wrong_pred = sum(class_wrong_pred)
+class_total_wrong_pred = np.sum([x for x in class_wrong_pred.values()])
 attr_acc = np.array([(attr_total[x] - attr_er[x])/attr_total[x] for x in range(len(attr200))])
-attr_total_wrong_pred = sum(attr_wrong_pred)
+attr_total_wrong_pred = np.sum([x for x in attr_wrong_pred.values()])
 
 with open(os.path.join(model_path, 'test_results.txt'), 'w') as f:
     # print('Test samples number: ', len(bbox_iou))

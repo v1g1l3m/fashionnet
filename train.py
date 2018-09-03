@@ -18,7 +18,6 @@ import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
 ### GLOBALS
-epochs = 200
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
@@ -47,28 +46,26 @@ def create_model(is_input_bottleneck, input_shape):
 
     input_flatten = Flatten()(common_inputs)
 
-    ## Classes
-    x = Dense(256, activation='tanh', name='dense_1_cls')(input_flatten)
-    x = Dropout(0.5, name='drop_1_cls')(x)
-    head_cls = Dense(256, activation='tanh', name='dense_2_cls')(x)
-    x = Dropout(0.5, name='drop_2_cls')(head_cls)
+    # Classes
+    x = Dense(256, activation='elu', name='dense_1_cls')(input_flatten)
+    x = BatchNormalization(name='bn_1_cls')(x)
+    head_cls = Dense(256, activation='elu', name='dense_2_cls')(x)
+    x = BatchNormalization(name='bn_2_cls')(head_cls)
     predictions_class = Dense(len(class35), activation='softmax', name='predictions_class')(x)
 
     # Bboxes
-    x = Dense(256, activation='tanh', name='dense_1_bbox')(input_flatten)
-    x = Dropout(0.5, name='drop_1_bbox')(x)
-    head_bbox = Dense(256, activation='tanh', name='dense_2_bbox')(x)
-    x = Dropout(0.5, name='drop_2_bbox')(head_bbox)
+    x = Dense(256, activation='elu', name='dense_1_bbox')(input_flatten)
+    x = BatchNormalization(name='bn_1_bbox')(x)
+    head_bbox = Dense(256, activation='elu', name='dense_2_bbox')(x)
+    x = BatchNormalization(name='bn_2_bbox')(head_bbox)
     predictions_bbox = Dense(4, activation='sigmoid', name='predictions_bbox')(x)
 
     # Attributes
-    x = Dense(256, activation='tanh', name='dense_1_attr')(input_flatten)
-    x = Dropout(0.5, name='drop_1_attr')(x)
-    head_attr = Dense(256, activation='tanh', name='dense_2_attr')(x)
+    x = Dense(256, activation='elu', name='dense_1_attr')(input_flatten)
+    x = BatchNormalization(name='bn_1_attr')(x)
+    head_attr = Dense(256, activation='elu', name='dense_2_attr')(x)
     merge_layer = concatenate([head_bbox, head_attr, head_cls])
-    x = Dropout(0.5, name='drop_merge')(merge_layer)
-    x = Dense(256, activation='tanh', name='dense_3_attr')(x)
-    x = Dropout(0.5, name='drop_2_attr')(x)
+    x = BatchNormalization(name='bn_merge')(merge_layer)
     predictions_attr = Dense(len(attr200), activation='sigmoid', name='predictions_attr')(x)
 
     # # BboxOrNotBbox
@@ -96,7 +93,7 @@ def train_model(batch_size):
     log_path = os.path.join(output_path, 'model_train.csv')
     csv_log = CSVLogger(log_path , separator=';', append=False)
     early_stopping = EarlyStopping(
-        monitor='val_predictions_class_loss', patience=20, verbose=1, mode='min')
+        monitor='val_predictions_attr_loss', patience=50, verbose=1, mode='auto')
     filepath = os.path.join(output_path, "best-weights-{epoch:03d}-{loss:.4f}-{val_loss:.4f}.hdf5")
     # filepath = os.path.join(output_path, 'best-weights-{epoch:03d}-{val_loss:.4f}-{val_acc:.4f}.hdf5')
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1,
@@ -113,9 +110,9 @@ def train_model(batch_size):
     plot_model(model, to_file=os.path.join(output_path, 'model.png'), show_shapes=True, show_layer_names=False)
     ## Compile
     model.compile(optimizer=RMSprop(lr=1e-4),
-                  loss={'predictions_bbox':'mae', 'predictions_attr': 'binary_crossentropy',
+                  loss={'predictions_bbox':'mse', 'predictions_attr': 'binary_crossentropy',
                         'predictions_class': 'categorical_crossentropy'},
-                  # loss_weights=[0.3,100,0.3],
+                  # loss_weights=[0.3, 0.3,0.3],
                   metrics=['accuracy'])
     logging.info('bottleneck path: {}'.format( btl_path))
     logging.info('output path: {}'.format(output_path))
@@ -124,7 +121,7 @@ def train_model(batch_size):
         with Parallel_np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz82.txt'),['bb', 'attr', 'cls'], maxsize=100) as val_gen:
             # time.sleep(100)
             model.fit_generator(train_gen, steps_per_epoch=328,
-                                    epochs=epochs,
+                                    epochs=200,
                                     validation_data=val_gen,
                                     validation_steps=82,
                                     class_weight=[[1.,1.,1.,1.], attr_weight, cls_weight],
