@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 import numpy as np
 from keras.models import model_from_json, load_model
 from keras.utils import plot_model
@@ -14,6 +15,9 @@ img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
 model_path = 'output/'
+if len(sys.argv) == 2:
+    model_path = sys.argv[1]
+    print(model_path)
 fashion_dataset_path='../Data/fashion_data/'
 
 class_names, _, attr_names = init_globals()
@@ -101,3 +105,16 @@ with open(os.path.join(model_path, 'test_results.txt'), 'w') as f:
     for i, attr in enumerate(attr200):
         print('{}% Total of attribute {}: {}, missed: {}, wrong predictions: {}'.format('%.2f'%(attr_acc[i]*100), attr_names[attr], attr_total[i], attr_er[i],(attr_wrong_pred[i]*100)/attr_total_wrong_pred))
         f.write('{}% Total of attribute {}: {}, missed: {}, wrong predictions: {}\n'.format('%.2f'%(attr_acc[i]*100), attr_names[attr], attr_total[i], attr_er[i],(attr_wrong_pred[i]*100)/attr_total_wrong_pred))
+    print('Test samples number: ', len(bbox_iou))
+    # f.write('Test samples number: {}\n'.format(len(bbox_iou)))
+    print('Total wrong predictions for class: ', class_total_wrong_pred)
+    # f.write('Total wrong predictions for class: {}\n'.format(class_total_wrong_pred))
+    print('Total wrong predictions for attributes: ', attr_total_wrong_pred)
+    # f.write('Total wrong predictions for attributes: {}\n'.format(attr_total_wrong_pred))
+    print('bbox iou average: ', np.mean(bbox_iou))
+    # f.write('bbox iou average: {}\n'.format(np.mean(bbox_iou)))
+    print('Class prediction accuracy: ', np.mean(cls_acc)*100)
+    # f.write('Class prediction accuracy: {}\n'.format(np.mean(cls_acc)*100))
+    print('Attribute prediction accuracy: ', np.mean(attr_acc)*100)
+    # f.write('Attribute prediction accuracy: {}\n'.format(np.mean(attr_acc)*100))   
+    

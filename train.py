@@ -1,6 +1,7 @@
 import os
 import datetime
 import time
+import pickle
 from PIL import Image
 from keras.optimizers import *
 from keras.models import Model
@@ -60,12 +61,12 @@ def create_model(is_input_bottleneck, input_shape):
     predictions_bbox = Dense(4, activation='sigmoid', name='predictions_bbox')(x)
 
     # Attributes
-    head_attr = Dense(256, activation='tanh', name='dense_1_attr')(input_flatten)
-    # x = Dropout(0.5, name='drop_1_attr')(x)
-    # head_attr = Dense(256, activation='tanh', name='dense_2_attr')(x)
+    x = Dense(256, activation='tanh', name='dense_1_attr')(input_flatten)
+    x = Dropout(0.5, name='drop_1_attr')(x)
+    head_attr = Dense(256, activation='tanh', name='dense_2_attr')(x)
     merge_layer = concatenate([head_bbox, head_attr, head_cls])
     x = Dropout(0.5, name='drop_merge')(merge_layer)
-    x = Dense(256, activation='tanh', name='dense_2_attr')(x)
+    x = Dense(256, activation='tanh', name='dense_3_attr')(x)
     x = Dropout(0.5, name='drop_2_attr')(x)
     predictions_attr = Dense(len(attr200), activation='sigmoid', name='predictions_attr')(x)
 
@@ -85,22 +86,10 @@ def create_model(is_input_bottleneck, input_shape):
     return model
 
 def train_model(batch_size):
-    # train_labels_class = []
-    # train_labels_attr = []
-    # with open(os.path.join(btl_path, 'btl_train.txt')) as f:
-    #     for name in f:
-    #         train_labels_class.append(class_names.index(name.split()[1]))
-    #         if len(name.split()) == 3:
-    #             for i in list(map(int, name.split()[2].split('-'))):
-    #                 train_labels_attr.append(i)
-    # train_labels_class = np.array(train_labels_class)
-    # train_labels_attr = np.array(train_labels_attr)
-    #
-    # with open(os.path.join(btl_path, 'btl_validation.txt')) as f:
-    #     for i, l in enumerate(f):
-    #         pass
-    # val_data_len = i + 1
-
+    with open(os.path.join(btl_path, 'attr_data_train.pkl'), 'rb') as f:
+        train_labels_attr = pickle.load(f)
+    with open(os.path.join(btl_path, 'class_data_train.pkl'), 'rb') as f:
+        train_labels_class = pickle.load(f)
     ## Build network
     ## Register Callbacks
     log_path = os.path.join(output_path, 'model_train.csv')
@@ -112,8 +101,8 @@ def train_model(batch_size):
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1,
                                  save_best_only=True, save_weights_only=False, mode='auto', period=3)
     callbacks_list = [csv_log, early_stopping, checkpoint]
-    # class_weight_val = class_weight.compute_class_weight('balanced', np.unique(train_labels_class), train_labels_class)
-    # attr_weight_val = class_weight.compute_class_weight('balanced', np.unique(train_labels_attr), train_labels_attr)
+    cls_weight = class_weight.compute_class_weight('balanced', class35, train_labels_class)
+    attr_weight = class_weight.compute_class_weight('balanced', attr200, train_labels_attr)
     # input_shape = (img_width, img_height, img_channel)
     input_shape = (7, 7, 512)
     # model = create_model(is_input_bottleneck=True, is_load_weights=False, input_shape, optimizer, learn_rate, decay, momentum, activation, dropout_rate)
@@ -123,7 +112,7 @@ def train_model(batch_size):
     plot_model(model, to_file=os.path.join(output_path, 'model.png'), show_shapes=True, show_layer_names=False)
     ## Compile
     model.compile(optimizer=RMSprop(lr=1e-4),
-                  loss={'predictions_bbox':'mse', 'predictions_attr': 'binary_crossentropy',
+                  loss={'predictions_bbox':'mae', 'predictions_attr': 'binary_crossentropy',
                         'predictions_class': 'categorical_crossentropy'},
                   # loss_weights=[0.3,100,0.3],
                   metrics=['accuracy'])
@@ -147,13 +136,14 @@ def train_model(batch_size):
                                     epochs=epochs,
                                     validation_data=val_gen,
                                     validation_steps=82,
-                                    # class_weight=[class_weight_val, attr_weight_val],
+                                    class_weight=[[1.,1.,1.,1.], attr_weight, cls_weight],
                                     # use_multiprocessing=True,
                                     callbacks=callbacks_list)
 									# predictions_attr_acc predictions_attr_loss val_predictions_attr_acc val_predictions_attr_loss
 									# predictions_class_acc predictions_class_loss val_predictions_class_acc val_predictions_class_loss
     print(datetime.datetime.now())
     print('total_time: {}'.format(str(datetime.datetime.now() - t_begin)))
+    print('model saved to: {}'.format(output_path))
     # TODO: These are not the best weights
     model.save(os.path.join(output_path, 'final_model.h5'))
     model.save_weights(os.path.join(output_path, 'final_weights.hdf5'))

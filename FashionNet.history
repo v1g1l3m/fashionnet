@@ -28,5 +28,16 @@ Class prediction accuracy: 19.820815252841815
 Attribute prediction accuracy: 0.7915542258070848
 
 4)Merge4 layers size reduced 03.09 10:04
+1:58:34.455678
+Test samples number:  1314
+Total wrong predictions for class:  595
+Total wrong predictions for attributes:  19900
+bbox iou average:  0.045178115
+Class prediction accuracy:  27.962064284026216
+Attribute prediction accuracy:  0.2260497109983631
+
+5)Merge 2 12:45
+
+
 
 

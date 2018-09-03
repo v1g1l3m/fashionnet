@@ -62,6 +62,9 @@ def plot_history(output_path, sep=';'):
             ax[i].plot(log.index, log[l], label=l)
             ax[i].plot(log.index, log["val_" + l],
                        label="val_" + l)
+            ymin = np.min([np.min(log["val_" + l][20:]), np.min(log[l][20:])])
+            ymax = np.max([np.max(log["val_" + l][20:]), np.max(log[l][20:])])
+            ax[i].set_ylim([ymin, ymax])
             ax[i].legend()
         # save the accuracies figure
         plt.tight_layout()
@@ -101,6 +104,9 @@ def draw_rect(ax, img, gt_bbox, text=None, textcolor=(0,0,0), edgecolor='red',li
     ax.imshow(img, aspect='equal')
 
 if __name__ == '__main__':
-    plot_history('output/', sep=';')
+    import sys
+    if len(sys.argv) == 2:
+        model_path = sys.argv[1]
+    plot_history(model_path, sep=';')
 
 
