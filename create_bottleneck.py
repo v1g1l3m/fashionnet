@@ -20,7 +20,7 @@ img_channel = 3
 
 fashion_dataset_path='../Data/fashion_data/'
 
-dataset_path='../Data/dataset_3heads100'
+dataset_path='../Data/dataset_3heads'
 dataset_train_path=os.path.join(dataset_path, 'train')
 dataset_val_path=os.path.join(dataset_path, 'validation')
 dataset_test_path=os.path.join(dataset_path, 'test')
@@ -298,77 +298,112 @@ if __name__ == '__main__':
     # create_bottleneck_structure()
     # save_bottleneck_3heads(1024)
 
-    #-------------------Generate test samples------------
-    img_path_bbox_attr_cls_tuples_list = []
-    for s in ['train85.txt']:
-        data_class_names = []
-        data_attr_idx = []
-        with open(os.path.join(fashion_dataset_path, s)) as f:
-            for line in f:
-                line = line.split()
-                img_path = line[0]
-                img_gt_bbox = list(map(float, line[1].split('-')))
-                attrs_1_hot = np.zeros(200, )
-                if line[2] != 'None':
-                    attrs_indx = list(map(int, line[2].split('-')))
-                    for x in attrs_indx:
-                        if x in attr200:
-                            data_attr_idx.append(x)
-                            attrs_1_hot[attr200.index(x)] = 1
-                class_1_hot = np.zeros((len(class35),), dtype=np.float32)
-                if line[3] in class35:
-                    data_class_names.append(line[3])
-                    class_1_hot[class35.index(line[3])] = 1
-                # img_path_bbox_attr_cls_tuples_list.append((img_path, img_gt_bbox, attrs_1_hot, class_1_hot))
-            with open(os.path.join(fashion_dataset_path, 'attr_data_'+s), 'wb') as f:
-                pickle.dump(data_attr_idx, f)
-            with open(os.path.join(fashion_dataset_path, 'class_data_'+s), 'wb') as f:
-                pickle.dump(data_class_names, f)
-    shuffle(img_path_bbox_attr_cls_tuples_list)
+    # #-------------------Generate test samples------------
+    # img_path_bbox_attr_cls_tuples_list = []
+    # for s in ['train85.txt']:
+    #     data_class_names = []
+    #     data_attr_idx = []
+    #     with open(os.path.join(fashion_dataset_path, s)) as f:
+    #         for line in f:
+    #             line = line.split()
+    #             img_path = line[0]
+    #             img_gt_bbox = list(map(float, line[1].split('-')))
+    #             attrs_1_hot = np.zeros(200, )
+    #             if line[2] != 'None':
+    #                 attrs_indx = list(map(int, line[2].split('-')))
+    #                 for x in attrs_indx:
+    #                     if x in attr200:
+    #                         data_attr_idx.append(x)
+    #                         attrs_1_hot[attr200.index(x)] = 1
+    #             class_1_hot = np.zeros((len(class35),), dtype=np.float32)
+    #             if line[3] in class35:
+    #                 data_class_names.append(line[3])
+    #                 class_1_hot[class35.index(line[3])] = 1
+    #             # img_path_bbox_attr_cls_tuples_list.append((img_path, img_gt_bbox, attrs_1_hot, class_1_hot))
+    #         with open(os.path.join(fashion_dataset_path, 'attr_data_'+s), 'wb') as f:
+    #             pickle.dump(data_attr_idx, f)
+    #         with open(os.path.join(fashion_dataset_path, 'class_data_'+s), 'wb') as f:
+    #             pickle.dump(data_class_names, f)
+    # shuffle(img_path_bbox_attr_cls_tuples_list)
+    # crop = 30
+    # test = set()
+    # classes_idx = dict((x, set()) for x in range(len(class35)))
+    # attrs_idx = dict((x, set()) for x in range(len(attr200)))
+    # count_shared_idx = dict()
+    # for i, tup in enumerate(img_path_bbox_attr_cls_tuples_list):
+    #     path, bbox, attrs, cls = tup[0], tup[1], tup[2], tup[3]
+    #     for x in np.argwhere(attrs==1):
+    #         if len(attrs_idx[x[0]]) < crop:
+    #             attrs_idx[x[0]].add(i)
+    #         # if count_shared_idx.setdefault(i, 0):
+    #         #     count_shared_idx[i] += + 1
+    #     for x in np.argwhere(cls == 1):
+    #         if len(classes_idx[x[0]]) < crop:
+    #             classes_idx[x[0]].add(i)
+    #         # if count_shared_idx.setdefault(i, 0):
+    #         #     count_shared_idx[i] += 1
+    # # for a in attrs_idx:
+    # #     for c in classes_idx:
+    # [test.add(y) for x in attrs_idx.values() for y in x]
+    # [test.add(y) for x in classes_idx.values() for y in x]
+    # print(len(test))
+    # images_list = []
+    # class_1_hot_list = []
+    # attrs_1_hot_list = []
+    # bbox_list = []
+    # for idx in test:
+    #     tup = img_path_bbox_attr_cls_tuples_list[idx]
+    #     path, bbox, attrs, cls = tup[0], tup[1], tup[2], tup[3]
+    #     img = Image.open(path)
+    #     w, h = img.size[0], img.size[1]
+    #     img = img.resize((img_width, img_height))
+    #     img = np.array(img).astype(np.float32)
+    #     images_list.append(img)
+    #     bbox_list.append([bbox[0]/w, bbox[1]/h, bbox[2]/w, bbox[3]/h, w, h])
+    #     attrs_1_hot_list.append(attrs)
+    #     class_1_hot_list.append(cls)
+    # images_list = preprocess_input(np.array(images_list))
+    # bbox_list = np.array(bbox_list)
+    # attrs_1_hot_list = np.array(attrs_1_hot_list)
+    # class_1_hot_list = np.array(class_1_hot_list)
+    # np.savez(open(os.path.join(fashion_dataset_path, 'test%d.npz' % crop), 'wb'), img=images_list,
+    #          cls=class_1_hot_list, attr=attrs_1_hot_list, bbwh=bbox_list)
+    # model = VGG16(include_top=False, weights='imagenet', input_shape=input_shape)
+    # bottleneck_features_train_class = model.predict(images_list)
+    # np.savez(open(os.path.join(fashion_dataset_path, 'btl_test%d.npz' % crop), 'wb'), btl=bottleneck_features_train_class,
+    #          cls=class_1_hot_list, attr=attrs_1_hot_list, bbwh=bbox_list)
+
+    # -------------------Generate test samples for post model------------
     crop = 30
-    test = set()
-    classes_idx = dict((x, set()) for x in range(len(class35)))
-    attrs_idx = dict((x, set()) for x in range(len(attr200)))
-    count_shared_idx = dict()
-    for i, tup in enumerate(img_path_bbox_attr_cls_tuples_list):
-        path, bbox, attrs, cls = tup[0], tup[1], tup[2], tup[3]
-        for x in np.argwhere(attrs==1):
-            if len(attrs_idx[x[0]]) < crop:
-                attrs_idx[x[0]].add(i)
-            # if count_shared_idx.setdefault(i, 0):
-            #     count_shared_idx[i] += + 1
-        for x in np.argwhere(cls == 1):
-            if len(classes_idx[x[0]]) < crop:
-                classes_idx[x[0]].add(i)
-            # if count_shared_idx.setdefault(i, 0):
-            #     count_shared_idx[i] += 1
-    # for a in attrs_idx:
-    #     for c in classes_idx:
-    [test.add(y) for x in attrs_idx.values() for y in x]
-    [test.add(y) for x in classes_idx.values() for y in x]
-    print(len(test))
+    img_name_class_attr_iou_tuples = []
+    for train_val in ['validation', 'test']:
+        for class_name in class35:
+            dataset_class_path = os.path.join(dataset_path, train_val, class_name)
+            logging.debug('dataset_train_class_path {}'.format(dataset_class_path))
+            images_path_name = sorted(glob.glob(dataset_class_path + '/*.jpg'))
+            for name in images_path_name:
+                if os.name == 'nt':
+                    name = name.replace('\\', '/')
+                iou = name.split('_')[-1].split('.jpg')[0]
+                if (iou == '1.0'):
+                    img_name_class_attr_iou_tuples.append((name, class_name))
+    print('dataset power: {}'.format(len(img_name_class_attr_iou_tuples)))
+    shuffle(img_name_class_attr_iou_tuples)
     images_list = []
-    class_1_hot_list = []
-    attrs_1_hot_list = []
-    bbox_list = []
-    for idx in test:
-        tup = img_path_bbox_attr_cls_tuples_list[idx]
-        path, bbox, attrs, cls = tup[0], tup[1], tup[2], tup[3]
+    classes_idx = dict((x, 0) for x in class35)
+    for path, cls in img_name_class_attr_iou_tuples:
+        if classes_idx[cls] < crop:
+            images_list.append(path)
+            classes_idx[cls] += 1
+    print('samples: {}'.format(len(images_list)))
+    imgs = []
+    for path in images_list:
         img = Image.open(path)
-        w, h = img.size[0], img.size[1]
         img = img.resize((img_width, img_height))
         img = np.array(img).astype(np.float32)
-        images_list.append(img)
-        bbox_list.append([bbox[0]/w, bbox[1]/h, bbox[2]/w, bbox[3]/h, w, h])
-        attrs_1_hot_list.append(attrs)
-        class_1_hot_list.append(cls)
-    images_list = preprocess_input(np.array(images_list))
-    bbox_list = np.array(bbox_list)
-    attrs_1_hot_list = np.array(attrs_1_hot_list)
-    class_1_hot_list = np.array(class_1_hot_list)
-    np.savez(open(os.path.join(fashion_dataset_path, 'test%d.npz' % crop), 'wb'), img=images_list,
-             cls=class_1_hot_list, attr=attrs_1_hot_list, bbwh=bbox_list)
+        imgs.append(img)
+    images_list = preprocess_input(np.array(imgs))
+    np.savez(open(os.path.join(fashion_dataset_path, 'post_test%d.npz' % crop), 'wb'), img=images_list)
     model = VGG16(include_top=False, weights='imagenet', input_shape=input_shape)
     bottleneck_features_train_class = model.predict(images_list)
-    np.savez(open(os.path.join(fashion_dataset_path, 'btl_test%d.npz' % crop), 'wb'), btl=bottleneck_features_train_class,
-             cls=class_1_hot_list, attr=attrs_1_hot_list, bbwh=bbox_list)
+    np.savez(open(os.path.join(fashion_dataset_path, 'post_btl_test%d.npz' % crop), 'wb'), btl=bottleneck_features_train_class)
