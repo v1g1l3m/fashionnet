@@ -357,28 +357,41 @@ if __name__ == '__main__':
     # print([x[1] for x in b[:200]])
 
     #--------------------DeepFashion dataset stats---------------------
-    with open(fashion_dataset_path + 'train.txt', 'w') as f_train:
-        with open(fashion_dataset_path + 'validation.txt', 'w') as f_validation:
-            with open(fashion_dataset_path + 'test.txt', 'w') as f_test:
-                with open(fashion_dataset_path + '/Anno/list_bbox.txt') as file_bbox:
-                    with open(fashion_dataset_path + '/Anno/list_category_img.txt') as file_category:
-                        with open(os.path.join(fashion_dataset_path, 'Eval/list_eval_partition.txt')) as file_partition:
-                            with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_img.txt')) as file_attr:
-                                next(file_attr)
-                                next(file_attr)
-                                for line in file_attr:
-                                    line = line.split()
-                                    img_path = os.path.join(fashion_dataset_path, 'Img', line[0])
-                                    img_attr = np.array(eval('[' + ','.join(line[1:]) + ']'))
-                                    img_attr = '-'.join(map(str, [x[0] for x in list(np.argwhere(img_attr == 1))]))
-                                    if len(img_attr) == 0:
-                                        img_attr = None
-                                    img_class = class_names[int(get_second_arg_from_file(line[0], file_category)) - 1]
-                                    img_gt_bbox = get_gt_bbox_from_file(line[0], file_bbox)
-                                    img_gt_bbox = '-'.join(map(str, img_gt_bbox))
-                                    img_part = get_second_arg_from_file(line[0], file_partition)
-                                    if img_part == 'val':
-                                        img_part = 'validation'
-                                    file_to_write = eval('f_{}'.format(img_part))
-                                    file_to_write.write('{} {} {} {}\n'.format(img_path, img_gt_bbox, img_attr, img_class))
+    with open(fashion_dataset_path + 'train85.txt', 'w') as f_train:
+        with open(fashion_dataset_path + 'validation15.txt', 'w') as f_validation:
+            # with open(fashion_dataset_path + 'test.txt', 'w') as f_test:
+            img_path_bbox_attr_cls_tuples_list = []
+            with open(fashion_dataset_path + '/Anno/list_bbox.txt') as file_bbox:
+                with open(fashion_dataset_path + '/Anno/list_category_img.txt') as file_category:
+                    with open(os.path.join(fashion_dataset_path, 'Eval/list_eval_partition.txt')) as file_partition:
+                        with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_img.txt')) as file_attr:
+                            next(file_attr)
+                            next(file_attr)
+                            for line in file_attr:
+                                line = line.split()
+                                img_path = os.path.join(fashion_dataset_path, 'Img', line[0])
+                                img = Image.open(img_path)
+                                width, height = img.size[0], img.size[1]
+                                img_attr = np.array(eval('[' + ','.join(line[1:]) + ']'))
+                                img_attr = '-'.join(map(str, [x[0] for x in list(np.argwhere(img_attr == 1))]))
+                                if len(img_attr) == 0:
+                                    img_attr = None
+                                img_class = class_names[int(get_second_arg_from_file(line[0], file_category)) - 1]
+                                img_gt_bbox = get_gt_bbox_from_file(line[0], file_bbox)
+                                img_gt_bbox = [img_gt_bbox[0]/width, img_gt_bbox[1]/height, img_gt_bbox[2]/width, img_gt_bbox[3]/height]
+                                img_gt_bbox = '-'.join(map(str, img_gt_bbox))
+                                img_part = get_second_arg_from_file(line[0], file_partition)
+                                if img_part == 'val':
+                                    img_part = 'validation'
+                                # file_to_write = eval('f_{}'.format(img_part))
+                                # file_to_write.write('{} {} {} {}\n'.format(img_path, img_gt_bbox, img_attr, img_class))
+                                img_path_bbox_attr_cls_tuples_list.append((img_path, img_gt_bbox, img_attr, img_class, width, height))
+            shuffle(img_path_bbox_attr_cls_tuples_list)
+            shuffle(img_path_bbox_attr_cls_tuples_list)
+            for i in range(int(len(img_path_bbox_attr_cls_tuples_list)*0.85)):
+                img_path, img_gt_bbox, img_attr, img_class, width, height = img_path_bbox_attr_cls_tuples_list[i]
+                f_train.write('{} {} {} {} {} {}\n'.format(img_path, img_gt_bbox, img_attr, img_class, width, height))
+            for i in range(i, len(img_path_bbox_attr_cls_tuples_list)):
+                img_path, img_gt_bbox, img_attr, img_class, width, height = img_path_bbox_attr_cls_tuples_list[i]
+                f_validation.write('{} {} {} {} {} {}\n'.format(img_path, img_gt_bbox, img_attr, img_class, width, height))
     pass
