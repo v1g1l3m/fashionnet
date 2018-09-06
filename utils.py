@@ -7,6 +7,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from PIL import Image, ImageFont, ImageDraw
+from colorthief import ColorThief
+import scipy
+import scipy.misc
+import scipy.cluster
+from sklearn.metrics import pairwise_distances_argmin_min
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
 # GLOBALS
@@ -104,9 +109,49 @@ def draw_rect(ax, img, gt_bbox, text=None, textcolor=(0,0,0), edgecolor='red',li
     ax.imshow(img, aspect='equal')
 
 if __name__ == '__main__':
-    import sys
-    if len(sys.argv) == 2:
-        model_path = sys.argv[1]
-    plot_history(model_path, sep=';')
+    color_map = []
+    with open('../Data/color_table.txt') as f:
+        for line in f:
+            line = line.split()
+            r, g, b = line[1][:2], line[1][2:4], line[1][4:]
+            color_map.append(([int(r, 16), int(g, 16), int(b, 16)], line[0], '#'+line[1]))
+    colors = np.array([x[0] for x in color_map])
+    images_path_name = sorted(glob.glob('../color_pred/*.*g'))
+    NUM_COLORS = 5
+    for name in images_path_name:
+        im = Image.open(name)
+        tt = im.getcolors(NUM_COLORS)
+        # im = im.resize((150, 150))  # optional, to reduce time
+        ar = np.asarray(im)
+        shape = ar.shape
+        ar = ar.reshape(scipy.product(shape[:2]), shape[2]).astype(float)
+
+        codes, dist = scipy.cluster.vq.kmeans(ar, NUM_COLORS)
+        # print ('cluster centres:\n', codes)
+        vecs, dist = scipy.cluster.vq.vq(ar, codes)  # assign codes
+        counts, bins = scipy.histogram(vecs, len(codes))  # count occurrences
+        s_palette = [x[1]/256 for x in sorted(zip(counts, codes), reverse=True)]
+          # find most frequent
+        s_peak = codes[scipy.argmax(counts)]
+        color_thief = ColorThief(name)
+        cf_peak = color_thief.get_color(quality=1)
+        cf_palette = [(x[0]/256,x[1]/256,x[2]/256) for x in color_thief.get_palette(color_count=NUM_COLORS)]
+        fig, ax = plt.subplots(1, 1, figsize=(6, 6), frameon=False)
+        ax.imshow(im)
+        for i, cc in enumerate(s_palette):
+            # color = [int(cc[0]), int(cc[1]), int(cc[2])]
+            ax.add_patch(mpatches.CirclePolygon((100, 50 + 10*i), color=cc))
+        for i, cc in enumerate(cf_palette):
+            # color = [int(cc[0]), int(cc[1]), int(cc[2])]
+            ax.add_patch(mpatches.CirclePolygon((150, 50 + 10*i), color=cc))
+        ax.imshow(im)
+        plt.show()
+        print('scipy', s_peak, s_palette)
+        print('cf', cf_peak, cf_palette)
+    # import sys
+    # if len(sys.argv) == 2:
+    #     model_path = sys.argv[1]
+    # plot_history(model_path, sep=';')
+
 
 
