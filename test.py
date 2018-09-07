@@ -2,6 +2,7 @@
 import os
 import sys
 import pickle
+import glob
 import numpy as np
 from keras.models import model_from_json, load_model
 from keras.utils import plot_model
@@ -9,6 +10,7 @@ from sklearn.utils import class_weight
 from keras.optimizers import *
 import matplotlib.pyplot as plt
 from utils import init_globals, bb_intersection_over_union, draw_rect
+from train import create_model
 import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
@@ -16,14 +18,15 @@ logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ]
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
-model_path = 'output5/'
+model_path = 'output/'
 if len(sys.argv) > 1:
     model_path = sys.argv[1]
     print(model_path)
 fashion_dataset_path='../Data/fashion_data/'
 btl_path = 'E:\\ML\\bottleneck_df'
 
-class_names, _, attr_names = init_globals()
+global class_names, input_shape, attr_names, class35, attr200
+class_names, input_shape, attr_names = init_globals()
 class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
            'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie', 'Blouse',
            'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel', 'Sweatshorts',
@@ -39,26 +42,36 @@ attr200 = [730, 365, 513, 495, 836, 596, 822, 254, 884, 142, 212, 883, 837, 892,
            562, 108, 25, 450, 785, 877, 18, 42, 624, 716, 36, 920, 423, 784, 788, 538, 325, 958, 480, 20, 38, 931, 666,
            561]
 
-model_name = 'final_model.h5'    
+model_name = os.path.join(model_path, 'final_model.h5') 
 if len(sys.argv) > 2:
-    if (sys.argv[2] == 'b'):
-        model_name = 'best-weights.hdf5'  
-model = load_model(os.path.join(model_path, model_name))
+        model_name = os.path.join(model_path, 'best-weights.hdf5')
+        cand = glob.glob(model_path + 'best-weights-*.hdf5')
+        for n in cand:
+            l =int(n.split('-')[2])
+            if int(sys.argv[2]) == l:
+                model_name = n
+                print(model_name)
+model = load_model(model_name)
 # plot_model(model, to_file=os.path.join(model_path, 'model.png'), show_shapes=True, show_layer_names=False)
-# with open('output/bottleneck_fc_model.json') as f:
-#     model = model_from_json(f.read())
-# model.load_weights('output/bottleneck_fc_model.h5')
-# model.compile(optimizer=RMSprop(lr=1e-4),loss={'predictions_bbox':'mse', 'predictions_attr': 'binary_crossentropy','predictions_class': 'categorical_crossentropy'}, metrics=['accuracy'])
-
-X = np.load(os.path.join(fashion_dataset_path, 'btl_test10.npz'))
-bboxes, attrs, classes = model.predict(X['btl'])
-with open(os.path.join(btl_path, 'attr_data_train.pkl'), 'rb') as f:
-    train_labels_attr = pickle.load(f)
-with open(os.path.join(btl_path, 'class_data_train.pkl'), 'rb') as f:
-    train_labels_class = pickle.load(f)
-cls_weight = class_weight.compute_class_weight('balanced', class35, train_labels_class)
-attr_weight = class_weight.compute_class_weight('balanced', attr200, train_labels_attr)
-out_weights = [[1.,1.,1.,1.], attr_weight, cls_weight]
+# model = create_model(False, (224, 224, 3), class35, attr200, mode=1)
+# model.load_weights('output/final_weights.hdf5', by_name=True)
+# model.compile(optimizer=SGD(lr=1e-5),
+#               loss={
+#                     'predictions_bbox':'mse',
+#                     'predictions_attr':'binary_crossentropy',
+#                     'predictions_class':'categorical_crossentropy',
+#                     },
+#               metrics=['accuracy'])
+# model.save('full_model.h5')
+X = np.load(os.path.join(fashion_dataset_path, 'test30.npz'))
+import time
+t1=time.time()
+bboxes, attrs, classes = model.predict(X['img'],48, verbose=1)
+t2=time.time()
+# with open(os.path.join(btl_path, 'attr_data_train.pkl'), 'rb') as f:
+    # train_labels_attr = pickle.load(f)
+# with open(os.path.join(btl_path, 'class_data_train.pkl'), 'rb') as f:
+    # train_labels_class = pickle.load(f)
 
 class_er = dict((x, 0) for x in range(len(class35)))
 class_wrong_pred = dict((x, 0) for x in range(len(class35)))
@@ -72,6 +85,7 @@ for i, bbwh in enumerate(X['bbwh']):
     bb_act = [bbwh[0]*w, bbwh[1]*h, bbwh[2]*w, bbwh[3]*h]
     bb_pred = [bboxes[i][0]*w, bboxes[i][1]*h, bboxes[i][2]*w, bboxes[i][3]*h]
     bbox_iou.append(bb_intersection_over_union(bb_act, bb_pred))
+    # bbox_iou.append(bbwh[4])
     # img = np.zeros((int(w),int(h),3), dtype=np.int8)
     # ax = plt.subplot()
     # draw_rect(ax, img, bb_act, edgecolor='green')
@@ -125,18 +139,19 @@ with open(os.path.join(model_path, 'test_results.txt'), 'w') as f:
     for i, attr in enumerate(attr200):
         print('{}% Total of attribute {}: {}, missed: {}, wrong predictions: {}'.format('%.2f'%(attr_acc[i]*100), attr_names[attr], attr_total[i], attr_er[i],(attr_wrong_pred[i]*100)/attr_total_wrong_pred))
         f.write('{}% Total of attribute {}: {}, missed: {}, wrong predictions: {}\n'.format('%.2f'%(attr_acc[i]*100), attr_names[attr], attr_total[i], attr_er[i],(attr_wrong_pred[i]*100)/attr_total_wrong_pred))
-    print('Test samples number: ', len(bbox_iou))
-    # f.write('Test samples number: {}\n'.format(len(bbox_iou)))
-    print('Total wrong predictions for class: ', class_total_wrong_pred)
-    # f.write('Total wrong predictions for class: {}\n'.format(class_total_wrong_pred))
-    print('Total wrong predictions for attributes: ', attr_total_wrong_pred)
-    # f.write('Total wrong predictions for attributes: {}\n'.format(attr_total_wrong_pred))
-    print('bbox iou average: ', np.mean(bbox_iou))
-    # f.write('bbox iou average: {}\n'.format(np.mean(bbox_iou)))
-    print('Class prediction accuracy: ', np.mean(cls_acc)*100)
-    # f.write('Class prediction accuracy: {}\n'.format(np.mean(cls_acc)*100))
-    print('Attribute prediction accuracy: ', np.mean(attr_acc)*100)
-    # f.write('Attribute prediction accuracy: {}\n'.format(np.mean(attr_acc)*100))   
-    ret = model.evaluate(X['btl'], [X['bbwh'][:,:4], X['attr'], X['cls']])
-    print('metrics_names: ', model.metrics_names,'evaluate: ', ret)
+print('Test samples number: ', len(bbox_iou))
+# f.write('Test samples number: {}\n'.format(len(bbox_iou)))
+print('Total wrong predictions for class: ', class_total_wrong_pred)
+# f.write('Total wrong predictions for class: {}\n'.format(class_total_wrong_pred))
+print('Total wrong predictions for attributes: ', attr_total_wrong_pred)
+# f.write('Total wrong predictions for attributes: {}\n'.format(attr_total_wrong_pred))
+print('bbox iou average: ', np.mean(bbox_iou))
+# f.write('bbox iou average: {}\n'.format(np.mean(bbox_iou)))
+print('Class prediction accuracy: ', np.mean(cls_acc)*100)
+# f.write('Class prediction accuracy: {}\n'.format(np.mean(cls_acc)*100))
+print('Attribute prediction accuracy: ', np.mean(attr_acc)*100)
+# f.write('Attribute prediction accuracy: {}\n'.format(np.mean(attr_acc)*100))  
+# print(model.summary())
+print(t2-t1)
+    
     

@@ -51,10 +51,10 @@ def cluster_bboxes(bboxes, width, height, preference=-0.5, fast=False):
     return bboxes_clustered
 
 def selective_search_aggregated(image_path):
-    def selective_search_bboxwh(image, scale=500, sigma=0.35, min_size=50, rescale=15):
+    def selective_search_bboxwh(image, scale, sigma, rescale, min_size=50):
         pl, ph = np.percentile(image, (rescale, 100 - rescale))
         image = skimage.exposure.rescale_intensity(image, in_range=(pl, ph))
-        width, height, channels = image.shape
+        height, width, channels = image.shape
         region_pixels_threshold = (width * height) / 50
         img_lbl, regions = selectivesearch.selective_search(image, scale=scale, sigma=sigma, min_size=min_size)
         candidates = set()
@@ -72,9 +72,7 @@ def selective_search_aggregated(image_path):
         return candidates
     image = skimage.io.imread(image_path)
     bbox_agg = set()
-    [bbox_agg.add(y) for x in [0, 0.8] for y in selective_search_bboxwh(image, sigma=x)]
-    [bbox_agg.add(y) for x in [1, 1500] for y in selective_search_bboxwh(image, scale=x)]
-    [bbox_agg.add(y) for x in [0, 25] for y in selective_search_bboxwh(image, rescale=x)]
+    [bbox_agg.add(y) for x, y, z in [(300, 0, 0), (1, 0.35, 0), (300, 0, 25), (1, 0.35, 25)] for y in selective_search_bboxwh(image, x, y, z)]
     return list(bbox_agg)
 
 def display_seg(image_path, gt_bbox):
@@ -163,7 +161,7 @@ def display_seg(image_path, gt_bbox):
     #     ax2.set_xlabel(str(count))
     #     ax2.set_ylabel(str(z))
     image = skimage.io.imread(image_path)
-    width, height = image.shape[0], image.shape[1]
+    width, height = image.shape[1], image.shape[0]
     fig2, axes = plt.subplots(1, 4, figsize=(16, 8), frameon=False)
     x, y, w, h = gt_bbox[0], gt_bbox[1], gt_bbox[2] - gt_bbox[0], gt_bbox[3] - gt_bbox[1]
     bboxA = (x, y, w, h)
@@ -200,7 +198,7 @@ if __name__ == '__main__':
     for img_path, bbox in zip(image_paths, gt_bboxes):
         # display_seg(img_path, bbox)
         image = skimage.io.imread(img_path)
-        width, height = image.shape[0], image.shape[1]
+        width, height = image.shape[1], image.shape[0]
         bboxes3 = cluster_bboxes(selective_search_bbox_fast(image, int((width * height) / 50)), width, height,
                                  preference=-0.35, fast=True)
     print('{} secs'.format((time.time()-t1)))
@@ -208,7 +206,7 @@ if __name__ == '__main__':
     # for img_path, bbox in zip(image_paths, gt_bboxes):
     #     image = Image.open(img_path)
     #     image = skimage.io.imread(img_path)
-    #     width, height = image.shape[0], image.shape[1]
+    #     width, height = image.shape[1], image.shape[0]
     #     bboxes3 = cluster_bboxes(selective_search_bbox_fast(image, int((width * height) / 50)), width, height,
     #                              preference=-0.4, fast=True)
     # print('fast: {} secs'.format((time.time() - t1)))

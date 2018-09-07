@@ -18,7 +18,7 @@ bbox iou average: 0.040166642516851425
 Class prediction accuracy: 26.701650364342882
 Attribute prediction accuracy: 0.7266915670792831
 
-3)Merge2 improve classes and loss_weights 03.09 1:07
+3)Merge3 improve classes and loss_weights 03.09 1:07
 total_time: 0:42:19.041858
 Test samples number: 1314
 Total wrong predictions for class: 595
@@ -36,7 +36,57 @@ bbox iou average:  0.045178115
 Class prediction accuracy:  27.962064284026216
 Attribute prediction accuracy:  0.2260497109983631
 
-5)Merge 2 12:45
+5)Merge5
+Test samples number: 1314
+Total wrong predictions for class: 555
+Total wrong predictions for attributes: 23
+bbox iou average: 0.038802552968263626
+Class prediction accuracy: 29.058330915824005
+Attribute prediction accuracy: 0.33133307523551425
+
+6)
+1:48:13.918403
+Test samples number: 1314
+Total wrong predictions for class: 483
+Total wrong predictions for attributes: 146
+bbox iou average: 0.03743977099657059
+Class prediction accuracy: 40.760484811235415
+Attribute prediction accuracy: 4.405951981227318
+
+7)
+ 0:57:26.695672
+Test samples number: 1314
+Total wrong predictions for class: 177
+Total wrong predictions for attributes: 225
+bbox iou average: 0.8073318692628009
+Class prediction accuracy: 77.84941745464491
+Attribute prediction accuracy: 27.865103729569572
+
+8)512
+2:44:07.774125
+Test samples number: 1314
+Total wrong predictions for class: 154
+Total wrong predictions for attributes: 298
+bbox iou average: 0.8427107844372188
+Class prediction accuracy: 80.9952320643586
+Attribute prediction accuracy: 73.94860965288922
+
+9)1024
+Test samples number: 1314
+Total wrong predictions for class: 170
+Total wrong predictions for attributes: 225
+bbox iou average: 0.8728622118792996
+Class prediction accuracy: 81.72015783810632
+Attribute prediction accuracy: 74.62637276587469
+
+10)512 0.001
+4:10:18.982708
+Test samples number: 3834
+Total wrong predictions for class: 541
+Total wrong predictions for attributes: 3584
+bbox iou average: 0.8691748614246437
+Class prediction accuracy: 78.12945697628781
+Attribute prediction accuracy: 69.8772787181764
 
 
 
