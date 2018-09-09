@@ -5,23 +5,18 @@ import random
 import shutil
 from PIL import Image
 import skimage
-from statistics import mode
-
 from colorthief import ColorThief
-from keras.optimizers import *
-from keras.utils import plot_model
-from keras.applications import VGG16
-from keras.applications.vgg16 import preprocess_input
-from keras.models import Model, model_from_json, load_model
-from keras.layers import *
 from sklearn.cluster import AffinityPropagation, KMeans
 from sklearn.metrics import pairwise_distances_argmin_min
 import matplotlib.pyplot as plt
 from utils import init_globals, get_image_paths, draw_rect
-from train import create_model
-from segmentation import selective_search_aggregated, cluster_bboxes, selective_search_bbox_fast
+from segmentation import cluster_bboxes, selective_search_bbox_fast
 import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
+import grpc
+from tensorflow.contrib.util import make_tensor_proto, make_ndarray
+from tensorflow_serving.apis import predict_pb2, prediction_service_pb2_grpc
+from tensorflow.python.keras.applications.imagenet_utils import preprocess_input
 
 ### GLOBALS
 batch_size = 64
@@ -31,6 +26,19 @@ img_channel = 3
 prediction_path = '../prediction/'
 results_path = os.path.join(prediction_path, 'results')
 fashion_dataset_path='../Data/fashion_data/'
+
+def predict(X):
+    channel = grpc.insecure_channel('localhost:8500')
+    stub = prediction_service_pb2_grpc.PredictionServiceStub(channel)
+    request = predict_pb2.PredictRequest()
+    request.model_spec.name = 'fashionnet'
+    request.model_spec.signature_name = 'predict'
+    request.inputs['images'].CopyFrom(make_tensor_proto(X, shape=X.shape))
+    result = stub.Predict(request, 100.0)
+    bboxes = make_ndarray(result.outputs['bbox'])
+    attrs = make_ndarray(result.outputs['attr'])
+    classes = make_ndarray(result.outputs['cls'])
+    return (bboxes, attrs, classes)
 
 def intersection_area(boxes1, boxes2):
     x11, y11, x12, y12 = boxes1[0], boxes1[1], boxes1[2], boxes1[3]
@@ -58,21 +66,21 @@ def get_crops_resized(image_path_name, bboxeswh):
         dims.append((x1, y1, img_crop.size[0], img_crop.size[1]))
         img_crop = img_crop.resize((img_width, img_height))
         img_crop = np.array(img_crop).astype(np.float32)
+        if img_crop.shape[2] > 3:
+            img_crop = img_crop[:,:,:3]
         img_crops.append(img_crop)
     return (img_crops, dims)
 
 def display(image_path_name, width, height, bboxeswh, prediction_iou, prediction_class_name, prediction_class_prob, prediction_attr_names,
             prediction_attr_probs, prediction_bbox):
     thres = 50
-    true_bboxes = []
+    candidates = []
     true_frames = []
-    bbox_probs = []
-    cls_nm = []
-    cls_probs = []
-    attr_nm = []
-    attr_probs = []
+    full_list_cand = []
     for i in range(len(prediction_bbox)):
         if prediction_class_prob[i]*100 >= thres and len(prediction_attr_probs[i])>0 or i==len(bboxeswh)-1:
+            full_list_cand.append((prediction_bbox[i], prediction_iou[i], prediction_class_name[i],
+                                  prediction_class_prob[i], prediction_attr_names[i], prediction_attr_probs[i]))
             w1, h1 = prediction_bbox[i][2] - prediction_bbox[i][0], prediction_bbox[i][3] - prediction_bbox[i][1]
             if w1 * h1 < (width * height) / 40:
                 print('removed for size: ', prediction_bbox[i])
@@ -83,51 +91,30 @@ def display(image_path_name, width, height, bboxeswh, prediction_iou, prediction
                     print('removed for intersect: ', prediction_bbox[i])
                     break
             else:
-                true_bboxes.append(prediction_bbox[i])
+                candidates.append((prediction_bbox[i], prediction_iou[i], prediction_class_name[i],
+                                  prediction_class_prob[i], prediction_attr_names[i], prediction_attr_probs[i]))
                 true_frames.append(bboxeswh[i])
-                bbox_probs.append(prediction_iou[i])
-                cls_probs.append(prediction_class_prob[i])
-                cls_nm.append(prediction_class_name[i])
-                attr_nm.append(prediction_attr_names[i])
-                attr_probs.append(prediction_attr_probs[i])
-    bbox_probs = np.array(bbox_probs)
-    cls_probs = np.array(cls_probs)
-    attr_probs = np.array(attr_probs)
-    true_bboxes = np.array(true_bboxes)
     true_frames = np.array(true_frames)
-    # np_true_bboxes_scaled = np.array([[bb[0] / width, bb[1] / height, bb[2] / width, bb[3] / height] for bb in true_bboxes])
-    np_true_bboxes_scaled = np.array([[(bb[0]+bb[2]/2)/width, (bb[1]+bb[3]/2)/height] for bb in true_frames])
-    bbox_centers_colors = np.zeros((len(np_true_bboxes_scaled), 3))
-    bbox_colors = np.zeros((len(np_true_bboxes_scaled), 3))
-    bbox_colors[:,0] = 1
-    answer = []
-    if len(true_bboxes) > 1:
-        af = AffinityPropagation(preference=-0.05).fit(np_true_bboxes_scaled)
-        labels = af.labels_
-        frame_sizes = [x[2] * x[3] for x in true_frames]
-        for cluster in np.unique(labels):
-            frame_sizes_cluster = [x[2] * x[3] for x in true_frames[labels == cluster]]
-            max_size_frame_index = np.argwhere(frame_sizes == np.max(frame_sizes_cluster))[0][0]
-            cluster_color = np.random.rand(3,)
-            bbox_centers_colors[labels == cluster] = cluster_color
-            index = max_size_frame_index
-            answer.append(((true_bboxes[index][0], true_bboxes[index][1], true_bboxes[index][2], true_bboxes[index][3]), bbox_probs[index], cls_nm[index], cls_probs[index], attr_nm[index], attr_probs[index]))
-    else:
-        if len(true_bboxes) == 1:
-            answer.append(((true_bboxes[0][0], true_bboxes[0][1], true_bboxes[0][2], true_bboxes[0][3]), bbox_probs[0], cls_nm[0], cls_probs[0], attr_nm[0], attr_probs[0]))
-
-    # candids = list(answer)
-    # for x in answer:
-    #     w, h = x[0][2] - x[0][0], x[0][3] - x[0][1]
-    #     if w*h < (width*height)/40:
-    #         candids.remove(x)
-    #         print('removed for size: ', x)
-    #         continue
-    #     for y in answer:
-    #         if y != x and intersection_area(x[0], y[0]) > 0.5*w*h and y[6] > x[6]:
-    #             candids.remove(x)
-    #             print('removed for intersect: ', x)
-    #             break
+    # # np_true_frames_scaled = np.array([[bb[0] / width, bb[1] / height, bb[2] / width, bb[3] / height] for bb in true_bboxes])
+    # np_true_frames_scaled = np.array([[(bb[0]+bb[2]/2)/width, (bb[1]+bb[3]/2)/height] for bb in true_frames])
+    # bbox_centers_colors = np.zeros((len(np_true_frames_scaled), 3))
+    # bbox_colors = np.zeros((len(np_true_frames_scaled), 3))
+    # bbox_colors[:,0] = 1
+    # answer = []
+    # if len(true_frames) > 1:
+    #     af = AffinityPropagation(preference=-0.05).fit(np_true_frames_scaled)
+    #     labels = af.labels_
+    #     frame_sizes = [x[2] * x[3] for x in true_frames]
+    #     for cluster in np.unique(labels):
+    #         frame_sizes_cluster = [x[2] * x[3] for x in true_frames[labels == cluster]]
+    #         max_size_frame_index = np.argwhere(frame_sizes == np.max(frame_sizes_cluster))[0][0]
+    #         cluster_color = np.random.rand(3,)
+    #         bbox_centers_colors[labels == cluster] = cluster_color
+    #         index = max_size_frame_index
+    #         answer.append(full_list_cand[index])
+    # else:
+    #     if len(true_frames) == 1:
+    #         answer.append(full_list_cand[0])
 
     # fig, axes = plt.subplots(1, 3, figsize=(8, 5), frameon=False)
     # ax1 = axes[0]
@@ -149,33 +136,39 @@ def display(image_path_name, width, height, bboxeswh, prediction_iou, prediction
     # ax1.imshow(img1)
     # ax1.set_xlabel(image_path_name)
     # # 2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
-    # tags = []
-    # for i, bbox in enumerate(true_frames):
-    #     # x, y, w, h = bbox[0], bbox[1], (bbox[2] - bbox[0]), (bbox[3] - bbox[1])
-    #     x, y, w, h = bbox[0], bbox[1], bbox[2], bbox[3]
-    #     draw_rect(ax2, img2, (x, y, w, h), '%s %.2s%%'%(cls_nm[i],cls_probs[i]*100), edgecolor=bbox_colors[i])
-    #     ax2.plot(x + w/2, y + h/2, c=bbox_centers_colors[i], marker='o')
-    # ax2.imshow(img2)
+    # # for i, bbox in enumerate(true_frames):
+    # #     # x, y, w, h = bbox[0], bbox[1], (bbox[2] - bbox[0]), (bbox[3] - bbox[1])
+    # #     x, y, w, h = bbox[0], bbox[1], bbox[2], bbox[3]
+    # #     draw_rect(ax2, img2, (x, y, w, h), '%s %.2s%%'%(cls_nm[i],cls_probs[i]*100), edgecolor=bbox_colors[i])
+    # #     ax2.plot(x + w/2, y + h/2, c=bbox_centers_colors[i], marker='o')
+    # # ax2.imshow(img2)
+    # for bbox, bbox_prob, cls_name, cls_prob, attr_name, attr_prob in full_list_cand:
+    #     x, y, w, h = bbox[0], bbox[1], (bbox[2] - bbox[0]), (bbox[3] - bbox[1])
+    #     draw_rect(ax2, img2, (x, y, w, h), '%s %.3s%%'%(cls_name, cls_prob*100))
+    #     ax2.plot(x + w / 2, y + h / 2, 'ro')
+    # ax2.imshow(img2, aspect='equal')
     # 3333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333
-    img0 = Image.open(image_path_name)
     img00 = Image.open(image_path_name)
+    img0 = Image.open(image_path_name)
     fig0 = plt.figure(figsize=(5, 5), frameon=False)
     fig0.set_size_inches(5, 5)
     ax0 = plt.Axes(fig0, [0., 0., 1., 1.])
     ax0.set_axis_off()
     fig0.add_axes(ax0)
-    with open(os.path.join(results_path,'anno.txt'), 'a') as f:
-        for bbox,bbox_prob,cls_name,cls_prob,attr_name,attr_prob in answer:
+    ttags = []
+    with open(os.path.join(results_path,'annotation.txt'), 'a') as f:
+        for bbox, bbox_prob, cls_name, cls_prob, attr_name, attr_prob in candidates:
             x, y, w, h = bbox[0], bbox[1], (bbox[2] - bbox[0]), (bbox[3] - bbox[1])
             # draw_rect(ax3, img3, (x, y, w, h), cls_name, textcolor=(0, 255, 0))
             # ax3.plot(x + w/2, y + h/2, 'ro')
             draw_rect(ax0, img0, (x, y, w, h), cls_name, textcolor=(0, 255, 0))
             attr_probs = sorted(attr_prob, reverse=True)
             tags=','.join([attr_name[np.argwhere(attr_prob == x)[0][0]] for x in attr_probs])
+            ttags.append(tags)
             palette=','.join(get_palette(img00.crop((bbox[0],bbox[1],bbox[2],bbox[3]))))
             f.write('{} {} {}\n'.format(os.path.split(image_path_name)[1], tags, palette))
     # ax3.imshow(img3, aspect='equal')
-    # ax3.set_xlabel('\n'.join(tags))
+    # ax3.set_xlabel('\n'.join(ttags))
     # plt.show()
     fig0.savefig(os.path.join(results_path, os.path.split(image_path_name)[1]))
 
@@ -237,23 +230,24 @@ if __name__ == '__main__':
         # shutil.rmtree(results_path) # quationable
     # os.makedirs(results_path)
 
-    # base_model = VGG16(weights='imagenet', include_top=False, input_shape=input_shape)
-    model = load_model('models/full_model.h5')
     for index, img_path in enumerate(get_image_paths(prediction_path)):
         image = skimage.io.imread(img_path)
         w, h = image.shape[1], image.shape[0]
+        if image.shape[2] > 3:
+            image = image[:,:,:3]
         # bboxeswh = cluster_bboxes(selective_search_bbox_fast(image, w*h/50), w, h, -0.15)
-        bboxeswh = cluster_bboxes(selective_search_bbox_fast(np.array(image), (w * h) / 40), w, h, preference=-0.35)
+        bboxeswh = cluster_bboxes(selective_search_bbox_fast(image, (w * h) / 40), w, h, preference=-0.35)
         image_crops, dims = get_crops_resized(img_path, bboxeswh)
         img = Image.open(img_path)
         img = img.resize((img_width, img_height))
         img = np.array(img).astype(np.float32)
+        if img.shape[2] > 3:
+            img = img[:,:,:3]
         image_crops.append(img)
         dims.append((0, 0, w, h))
         bboxeswh.append([0, 0, w, h])
         images_list = preprocess_input(np.array(image_crops))
-        # predictions = base_model.predict(images_list, batch_size)
-        bboxes, attrs, classes = model.predict(images_list, batch_size, verbose=1)
+        bboxes, attrs, classes = predict(images_list)
         prediction_iou = []
         prediction_bbox = []
         prediction_attr_probs = []
@@ -267,7 +261,7 @@ if __name__ == '__main__':
             prediction_class_prob.append(np.max(pred_cls))
             prediction_class_name.append(class_names_RU[class_names.index(class35[np.argmax(pred_cls)])])
             prediction_attr_probs.append([x for x in pred_attr if x>= 0.5])
-            prediction_attr_names.append([attr_names_RU[attr200[i]] for i in range(len(pred_attr)) if pred_attr[i] >= 0.5])
+            prediction_attr_names.append([attr_names[attr200[i]] for i in range(len(pred_attr)) if pred_attr[i] >= 0.5])
         display(img_path, w, h, bboxeswh, prediction_iou, prediction_class_name, prediction_class_prob, prediction_attr_names,
                 prediction_attr_probs, prediction_bbox)
     a=2
