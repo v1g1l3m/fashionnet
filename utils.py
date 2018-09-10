@@ -18,12 +18,11 @@ logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ]
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
-fashion_dataset_path = '../Data/fashion_data/'
 
 ### FUNCTIONS ###
-def init_globals():
+def init_globals(fashion_dataset_path):
     input_shape = (img_width, img_height, img_channel)
-    class_names = []
+    class_names = ['None']
     with open(fashion_dataset_path + 'Anno/list_category_cloth.txt') as f:
         next(f)
         next(f)
@@ -35,9 +34,9 @@ def init_globals():
         next(f)
         for line in f:
             attr_names.append('-'.join(line.split()[:-1]))
-    return (class_names, input_shape, attr_names)
     logging.info('classes {} {}'.format(len(class_names), class_names))
     logging.info('attributes {} {}'.format(len(attr_names), attr_names))
+    return (class_names, input_shape, attr_names)
 
 def bb_intersection_over_union(boxes1, boxes2):
     x11, y11, x12, y12 = boxes1[0], boxes1[1], boxes1[0] + boxes1[2], boxes1[1] + boxes1[3]
@@ -69,7 +68,8 @@ def plot_history(output_path, sep=';'):
                        label="val_" + l)
             ymin = np.min([np.min(log["val_" + l][20:]), np.min(log[l][20:])])
             ymax = np.max([np.max(log["val_" + l][20:]), np.max(log[l][20:])])
-            ax[i].set_ylim([ymin, ymax])
+            if len(log[l]) > 20:
+                ax[i].set_ylim([ymin, ymax])
             ax[i].legend()
         # save the accuracies figure
         plt.tight_layout()

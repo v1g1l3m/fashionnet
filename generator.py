@@ -2,6 +2,8 @@ import numpy as np
 import os
 import glob
 import time
+
+from keras.applications.vgg16 import preprocess_input
 from skimage.io import imread
 from PIL import Image
 from random import shuffle
@@ -93,7 +95,7 @@ def np_arrays_reader(path):
 
 class Parallel_np_arrays_reader(object):
 
-    def __init__(self, path, out_keys, maxsize=100):
+    def __init__(self, path, out_keys, maxsize=100, numproc=1):
         self.q = Queue(maxsize)
         self.path = os.path.split(path)[0]
         self.out_keys = out_keys
@@ -101,8 +103,11 @@ class Parallel_np_arrays_reader(object):
         with open(path) as f:
             for btl_name in f:
                 self.np_arrays_path_list.append(btl_name.rstrip())
-        self.p = Process(target=self.write_to_queue)
-        self.p.start()
+        self.prs = []
+        for i in range(numproc):
+            p = Process(target=self.write_to_queue)
+            p.start()
+            self.prs.append(p)
 
     def __iter__(self):
         return self
@@ -117,21 +122,22 @@ class Parallel_np_arrays_reader(object):
                 else:
                     out= []
                     for key in self.out_keys:
-                        if key == None:
-                            out.append(key)
+                        if key == 'bbiou':
+                            out.append(temp[key][:,:4])
                         else:
                             out.append(temp[key])
                 self.q.put((temp['btl'], out))
-
+                
     def next(self):
         return self.q.get()
 
     def terminate(self):
-        self.p.terminate()
-        time.sleep(0.1)
-        if not self.p.is_alive():
-            self.p.join(timeout=1.0)
-            self.q.close()
+        for p in self.prs:
+            p.terminate()
+            time.sleep(0.1)
+            if not p.is_alive():
+                p.join(timeout=1.0)
+        self.q.close()
 
     # Python 3 compatibility
     def __next__(self):
@@ -189,9 +195,6 @@ class Parallel_image_read_transformer(object):
                     continue
                 img = img.resize((img_width, img_height))
                 img = np.array(img).astype(np.float32)
-                img[:, :, 0] -= 103.939
-                img[:, :, 1] -= 116.779
-                img[:, :, 2] -= 123.68
                 images_list.append(img)
                 class_1_hot_list.append(class_1_hot)
                 attrs_list.append(attrs_1_hot)
@@ -199,6 +202,7 @@ class Parallel_image_read_transformer(object):
                 if current_batch_size < self.batch_size - 1:
                     continue
                 out_img = np.array(images_list)
+                out_img = preprocess_input(out_img)
                 out_cls = np.array(class_1_hot_list)
                 out_bbiou = np.array(bbox_list)
                 out_attr = np.array(attrs_list)
@@ -230,7 +234,7 @@ class Parallel_image_read_transformer(object):
         self.terminate()
 
 if __name__ == "__main__":
-    class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
+    class36 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
                'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie',
                'Blouse',
                'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel', 'Sweatshorts',
@@ -287,7 +291,7 @@ if __name__ == "__main__":
     #         break
     #     t1 = time.time()
     # print('total time of {} iterations: {}'.format(i, total))
-    with Parallel_image_read_transformer(os.path.join(fashion_dataset_path, 'validation85.txt'), 32, class35, attr200, 10) as pargen:
+    with Parallel_image_read_transformer(os.path.join(fashion_dataset_path, 'validation85.txt'), 32, class36, attr200, 10) as pargen:
         next(pargen)
     #     time.sleep(45)
     #     i=0

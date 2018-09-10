@@ -1,4 +1,6 @@
 import os
+import pickle
+
 import numpy as np
 import glob
 import fnmatch
@@ -357,8 +359,16 @@ if __name__ == '__main__':
     # print([x[1] for x in b[:200]])
 
     #--------------------DeepFashion dataset stats---------------------
+    # img_neg_class = []
+    # for root, dirnames, filenames in sorted(os.walk('../Data/fashion_data/Img/img/neg_class')):
+    #     for filename in sorted(fnmatch.filter(filenames, '*.jpg')):
+    #         full_path = os.path.join(root, filename)
+    #         img = Image.open(full_path)
+    #         width, height = img.size[0], img.size[1]
+    #         img_neg_class.append((full_path, '0.0-0.0-0.0-0.0', 'None', 'None', width, height))
+
     with open(fashion_dataset_path + 'train85.txt', 'w') as f_train:
-        with open(fashion_dataset_path + 'validation15.txt', 'w') as f_validation:
+        with open(fashion_dataset_path + 'validation85.txt', 'w') as f_validation:
             # with open(fashion_dataset_path + 'test.txt', 'w') as f_test:
             img_path_bbox_attr_cls_tuples_list = []
             with open(fashion_dataset_path + '/Anno/list_bbox.txt') as file_bbox:
@@ -386,6 +396,16 @@ if __name__ == '__main__':
                                 # file_to_write = eval('f_{}'.format(img_part))
                                 # file_to_write.write('{} {} {} {}\n'.format(img_path, img_gt_bbox, img_attr, img_class))
                                 img_path_bbox_attr_cls_tuples_list.append((img_path, img_gt_bbox, img_attr, img_class, width, height))
+            # with open(fashion_dataset_path + 'train85.txt') as f:
+            #     for line in f:
+            #         line = line.split()
+            #         img_path_bbox_attr_cls_tuples_list.append((line[0], line[1], line[2], line[3], line[4], line[5]))
+            # with open(fashion_dataset_path + 'validation85.txt') as f:
+            #     for line in f:
+            #         line = line.split()
+            #         img_path_bbox_attr_cls_tuples_list.append((line[0], line[1], line[2], line[3], line[4], line[5]))
+            # img_path_bbox_attr_cls_tuples_list = img_path_bbox_attr_cls_tuples_list + img_neg_class
+            shuffle(img_path_bbox_attr_cls_tuples_list)
             shuffle(img_path_bbox_attr_cls_tuples_list)
             shuffle(img_path_bbox_attr_cls_tuples_list)
             for i in range(int(len(img_path_bbox_attr_cls_tuples_list)*0.85)):
@@ -394,4 +414,23 @@ if __name__ == '__main__':
             for i in range(i, len(img_path_bbox_attr_cls_tuples_list)):
                 img_path, img_gt_bbox, img_attr, img_class, width, height = img_path_bbox_attr_cls_tuples_list[i]
                 f_validation.write('{} {} {} {} {} {}\n'.format(img_path, img_gt_bbox, img_attr, img_class, width, height))
+    # -------------------------------------------------
+    new_class_weights = []
+    new_attr_weights = []
+    with open(fashion_dataset_path + 'train85.txt') as f:
+        for line in f:
+            line = line.split()
+            new_class_weights.append(line[3])
+            if line[2].split('-')[0] != 'None':
+                new_attr_weights = new_attr_weights + list(map(int, line[2].split('-')))
+    with open(fashion_dataset_path + 'validation85.txt') as f:
+        for line in f:
+            line = line.split()
+            new_class_weights.append(line[3])
+            if line[2].split('-')[0] != 'None':
+                new_attr_weights = new_attr_weights + list(map(int, line[2].split('-')))
+    with open(fashion_dataset_path + 'class_data_train85.pkl', 'wb') as f:
+        pickle.dump(new_class_weights, f)
+    with open(fashion_dataset_path + 'attr_data_train85.pkl', 'wb') as f:
+        pickle.dump(new_attr_weights, f)
     pass

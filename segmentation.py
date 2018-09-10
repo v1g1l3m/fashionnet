@@ -18,6 +18,7 @@ img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
 prediction_path = '../prediction/'
+fashion_dataset_path='../Data/fashion_data/'
 
 def selective_search_bbox_fast(image, region_pixels_threshold, min_edge=1, max_ratio=6):
     img_lbl, regions = selectivesearch.selective_search(image, scale=1, sigma=0)
@@ -35,19 +36,21 @@ def selective_search_bbox_fast(image, region_pixels_threshold, min_edge=1, max_r
         candidates.add(r['rect'])
     return candidates
 
-def cluster_bboxes(bboxes, width, height, preference=-0.5, fast=False):
+def cluster_bboxes(bboxes,orig_width, orig_height, width, height, preference=-0.5, fast=False):
     bboxes_clustered = []
     X = np.array([[bb[0] / width, bb[1] / height, bb[2] / width, bb[3] / height] for bb in bboxes])
+    if len(X) == 1:
+        return [(X[0][0] * orig_width, X[0][1] * orig_height, X[0][2] * orig_width, X[0][3] * orig_height)]
     af = AffinityPropagation(preference=preference).fit(X)
     labels = af.labels_
     if fast == True:
-        return [(centroid[0] * width, centroid[1] * height, centroid[2] * width, centroid[3] * height) for centroid in af.cluster_centers_]
+        return [(centroid[0] * orig_width, centroid[1] * orig_height, centroid[2] * orig_width, centroid[3] * orig_height) for centroid in af.cluster_centers_]
     for cluster in np.unique(labels):
         bboxes_cluster = X[labels == cluster]
         km = KMeans(n_clusters=1).fit(bboxes_cluster)
         closest, _ = pairwise_distances_argmin_min(km.cluster_centers_, bboxes_cluster)
         centroid = km.cluster_centers_[0]
-        bboxes_clustered.append((centroid[0] * width, centroid[1] * height, centroid[2] * width, centroid[3] * height))
+        bboxes_clustered.append((centroid[0] * orig_width, centroid[1] * orig_height, centroid[2] * orig_width, centroid[3] * orig_height))
     return bboxes_clustered
 
 def selective_search_aggregated(image_path):
@@ -185,7 +188,7 @@ def display_seg(image_path, gt_bbox):
 
 if __name__ == '__main__':
     global class_names, input_shape, attr_names
-    class_names, input_shape, attr_names = init_globals()
+    class_names, input_shape, attr_names = init_globals(fashion_dataset_path)
     image_paths = []
     gt_bboxes = []
     with open (os.path.join(prediction_path, 'annotation.txt')) as f:

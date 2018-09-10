@@ -141,10 +141,10 @@ def train_model():
         callbacks_list = [csv_log, checkpoint]
 
         model = create_model(True, (7, 7, 512), class36, attr200, mode='c')
+        # model = create_model(False, (224, 224, 3), class36, attr200, mode='bac')
         # model.load_weights('output2/final_weights.hdf5', by_name=True)
         # model.load_weights('output4/best-weights.hdf5', by_name=True)
-        # # model.predict(X)
-        # model.save('models/model2.h5')
+        # model.save('models/full_model2.h5')
         # return
         # with open(os.path.join(output_path, 'bottleneck_fc_model.json'), 'w') as f:
         #     f.write(model.to_json())
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     global class_names, input_shape, attr_names, class36, attr200
-    class_names, input_shape, attr_names = init_globals()
+    class_names, input_shape, attr_names = init_globals(fashion_dataset_path)
     class36 = ['None', 'Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
                'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie',
                'Blouse', 'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel',

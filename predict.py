@@ -178,7 +178,7 @@ def display(image_path_name, width, height, bboxeswh, prediction_iou, prediction
 ### MAIN ###
 if __name__ == '__main__':
     global class_names, input_shape, attr_names, attr_names_RU, class_names_RU, class36, attr200, colors, color_names
-    class_names, input_shape, attr_names = init_globals()
+    class_names, input_shape, attr_names = init_globals(fashion_dataset_path)
     class36 = ['None', 'Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
                'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie',
                'Blouse',
