@@ -7,11 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from PIL import Image, ImageFont, ImageDraw
-from colorthief import ColorThief
-import scipy
-import scipy.misc
 import scipy.cluster
-from sklearn.metrics import pairwise_distances_argmin_min
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
 # GLOBALS
@@ -22,7 +18,7 @@ img_channel = 3
 ### FUNCTIONS ###
 def init_globals(fashion_dataset_path):
     input_shape = (img_width, img_height, img_channel)
-    class_names = ['None']
+    class_names = []
     with open(fashion_dataset_path + 'Anno/list_category_cloth.txt') as f:
         next(f)
         next(f)

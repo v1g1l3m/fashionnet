@@ -5,7 +5,6 @@ import random
 import shutil
 from PIL import Image
 import skimage
-from colorthief import ColorThief
 from keras.applications import VGG16
 from keras.models import load_model
 from sklearn.cluster import AffinityPropagation, KMeans
@@ -16,9 +15,6 @@ from segmentation import cluster_bboxes, selective_search_bbox_fast
 import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 import time
-# import grpc
-# from tensorflow.contrib.util import make_tensor_proto, make_ndarray
-# from tensorflow_serving.apis import predict_pb2, prediction_service_pb2_grpc
 from tensorflow.python.keras.applications.imagenet_utils import preprocess_input
 
 ### GLOBALS
@@ -26,22 +22,9 @@ batch_size = 64
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
-prediction_path = '../prediction/'
+prediction_path = 'prediction/'
 results_path = os.path.join(prediction_path, 'results')
-fashion_dataset_path='../Data/fashion_data/'
-
-def predict(X):
-    channel = grpc.insecure_channel('localhost:8500')
-    stub = prediction_service_pb2_grpc.PredictionServiceStub(channel)
-    request = predict_pb2.PredictRequest()
-    request.model_spec.name = 'fashionnet'
-    request.model_spec.signature_name = 'predict'
-    request.inputs['images'].CopyFrom(make_tensor_proto(X, shape=X.shape))
-    result = stub.Predict(request, 100.0)
-    bboxes = make_ndarray(result.outputs['bbox'])
-    attrs = make_ndarray(result.outputs['attr'])
-    classes = make_ndarray(result.outputs['cls'])
-    return (bboxes, attrs, classes)
+fashion_dataset_path='fashion_data/'
 
 def intersection_area(boxes1, boxes2):
     x11, y11, x12, y12 = boxes1[0], boxes1[1], boxes1[2], boxes1[3]
@@ -51,13 +34,6 @@ def intersection_area(boxes1, boxes2):
     xB = np.minimum(x12, x22)
     yB = np.minimum(y12, y22)
     return np.maximum((xB - xA + 1), 0) * np.maximum((yB - yA + 1), 0)
-
-def get_palette(name, num_colors=5):
-    color_thief = ColorThief(name)
-    cf_palette = [(x[0], x[1], x[2]) for x in color_thief.get_palette(color_count=num_colors)]
-    closest, _ = pairwise_distances_argmin_min(cf_palette, colors)
-    cl_names = [color_names[i] for i in closest]
-    return cl_names
 
 def get_crops_resized(image_path_name, bboxeswh):
     img = Image.open(image_path_name)
@@ -151,7 +127,6 @@ def display(image_path_name, width, height, bboxeswh, prediction_iou, prediction
         # ax2.plot(x + w / 2, y + h / 2, 'ro')
     ax2.imshow(img2, aspect='equal')
     # 3333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333
-    img00 = Image.open(image_path_name)
     # img0 = Image.open(image_path_name)
     # fig0 = plt.figure(figsize=(5, 5), frameon=False)
     # fig0.set_size_inches(5, 5)
@@ -159,17 +134,14 @@ def display(image_path_name, width, height, bboxeswh, prediction_iou, prediction
     # ax0.set_axis_off()
     # fig0.add_axes(ax0)
     ttags = []
-    with open(os.path.join(results_path, 'annotation.txt'), 'a') as f:
-        for bbox, bbox_prob, cls_name, cls_prob, attr_name, attr_prob in candidates:
-            x, y, w, h = bbox[0], bbox[1], (bbox[2] - bbox[0]), (bbox[3] - bbox[1])
-            draw_rect(ax3, img3, (x, y, w, h), cls_name, textcolor=(0, 255, 0))
-            ax3.plot(x + w/2, y + h/2, 'ro')
-            # draw_rect(ax0, img0, (x, y, w, h), cls_name, textcolor=(0, 255, 0))
-            attr_probs = sorted(attr_prob, reverse=True)
-            tags=','.join([attr_name[np.argwhere(attr_prob == x)[0][0]] for x in attr_probs])
-            ttags.append(tags)
-            # palette=','.join(get_palette(img00.crop((bbox[0],bbox[1],bbox[2],bbox[3]))))
-            # f.write('{} {} {}\n'.format(os.path.split(image_path_name)[1], tags, palette))
+    for bbox, bbox_prob, cls_name, cls_prob, attr_name, attr_prob in candidates:
+        x, y, w, h = bbox[0], bbox[1], (bbox[2] - bbox[0]), (bbox[3] - bbox[1])
+        draw_rect(ax3, img3, (x, y, w, h), cls_name, textcolor=(0, 255, 0))
+        ax3.plot(x + w/2, y + h/2, 'ro')
+        # draw_rect(ax0, img0, (x, y, w, h), cls_name, textcolor=(0, 255, 0))
+        attr_probs = sorted(attr_prob, reverse=True)
+        tags=','.join([attr_name[np.argwhere(attr_prob == x)[0][0]] for x in attr_probs])
+        ttags.append(tags)
     ax3.imshow(img3, aspect='equal')
     ax3.set_xlabel('\n'.join(ttags))
     plt.show()
@@ -177,9 +149,9 @@ def display(image_path_name, width, height, bboxeswh, prediction_iou, prediction
 
 ### MAIN ###
 if __name__ == '__main__':
-    global class_names, input_shape, attr_names, attr_names_RU, class_names_RU, class36, attr200, colors, color_names
+    global class_names, input_shape, attr_names, attr_names_RU, class_names_RU, class35, attr200, colors, color_names
     class_names, input_shape, attr_names = init_globals(fashion_dataset_path)
-    class36 = ['None', 'Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
+    class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
                'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie',
                'Blouse',
                'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel', 'Sweatshorts',
@@ -203,37 +175,11 @@ if __name__ == '__main__':
                562, 108, 25, 450, 785, 877, 18, 42, 624, 716, 36, 920, 423, 784, 788, 538, 325, 958, 480, 20, 38, 931,
                666,
                561]
-    class_names_RU = ['Фон']
-    with open(os.path.join(fashion_dataset_path, 'Anno/1_list_category_cloth.txt'), encoding='utf-8') as f:
-        next(f)
-        next(f)
-        for line in f:
-            class_names_RU.append(line.split()[2])
-    attr_names_RU = []
-    with open(os.path.join(fashion_dataset_path, 'Anno/2_list_attr_cloth.txt'), encoding='utf-8') as f:
-        next(f)
-        next(f)
-        for line in f:
-            lines = line.split()
-            for i in range(len(lines)):
-                if lines[i].isdigit():
-                    break
-            attr_names_RU.append('-'.join(lines[i+1:]))
-    color_names = []
-    colors = []
-    with open('../Data/color_table.txt') as f:
-        for line in f:
-            line = line.split()
-            r, g, b = line[1][:2], line[1][2:4], line[1][4:]
-            color_names.append(line[0]+'-#'+line[1])
-            colors.append([int(r, 16), int(g, 16), int(b, 16)])
-    colors = np.array(colors)
-
     # if os.path.exists(results_path):
         # shutil.rmtree(results_path) # quationable
     # os.makedirs(results_path)
-    base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
-    model = load_model('models/model2.h5')
+    # base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    model = load_model('models/full_model2.h5')
     for index, img_path in enumerate(get_image_paths(prediction_path)):
         image = Image.open(img_path)
         w, h = image.size[0], image.size[1]
@@ -260,7 +206,7 @@ if __name__ == '__main__':
         images_list = preprocess_input(np.array(image_crops))
         t1 = time.time()
         logging.info('prepare time: {}'.format(t1 - t2))
-        bboxes, attrs, classes = model.predict(base_model.predict(images_list, verbose=1), verbose=1)
+        bboxes, attrs, classes = model.predict(images_list, verbose=1)
         t2 = time.time()
         logging.info('prediction time: {}'.format(t2 - t1))
         prediction_iou = []
@@ -273,12 +219,8 @@ if __name__ == '__main__':
             pred_bbox, pred_cls, pred_attr = t[0], t[1], t[2]
             prediction_iou.append(0)
             prediction_bbox.append((dims[i][0] + pred_bbox[0]*dims[i][2], dims[i][1] + pred_bbox[1]*dims[i][3], dims[i][0] + pred_bbox[2]*dims[i][2],dims[i][1] +  pred_bbox[3]*dims[i][3]))
-            if pred_cls[0] < 0.5:
-                prediction_class_prob.append(np.max(pred_cls[1:]))
-                prediction_class_name.append(class_names_RU[class_names.index(class36[np.argmax(pred_cls[1:])+1])])
-            else:
-                prediction_class_prob.append(pred_cls[0])
-                prediction_class_name.append(class_names_RU[0])
+            prediction_class_prob.append(np.max(pred_cls[1:]))
+            prediction_class_name.append(class35[np.argmax(pred_cls[1:])])
             prediction_attr_probs.append([x for x in pred_attr if x>= 0.5])
             prediction_attr_names.append([attr_names[attr200[i]] for i in range(len(pred_attr)) if pred_attr[i] >= 0.5])
         display(img_path, w, h, bboxeswh, prediction_iou, prediction_class_name, prediction_class_prob, prediction_attr_names,

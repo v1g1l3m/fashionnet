@@ -35,9 +35,9 @@ if len(sys.argv) > 1:
 fashion_dataset_path='../Data/fashion_data/'
 btl_path = 'E:\\ML\\bottleneck_dfn'
 
-global class_names, input_shape, attr_names, class36, attr200
+global class_names, input_shape, attr_names, class35, attr200
 class_names, input_shape, attr_names = init_globals(fashion_dataset_path)
-class36 = ['None', 'Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
+class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
            'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie', 'Blouse',
            'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel', 'Sweatshorts',
            'Jumpsuit', 'Poncho', 'Trunks', 'Sweater', 'Robe']
@@ -97,9 +97,9 @@ t2=time.time()
 # with open(os.path.join(btl_path, 'class_data_train.pkl'), 'rb') as f:
     # train_labels_class = pickle.load(f)
 
-class_er = dict((x, 0) for x in range(len(class36)))
-class_wrong_pred = dict((x, 0) for x in range(len(class36)))
-class_total = dict((x, 0) for x in range(len(class36)))
+class_er = dict((x, 0) for x in range(len(class35)))
+class_wrong_pred = dict((x, 0) for x in range(len(class35)))
+class_total = dict((x, 0) for x in range(len(class35)))
 # attr_er = dict((x, 0) for x in range(len(attr200)))
 # attr_wrong_pred = dict((x, 0) for x in range(len(attr200)))
 # attr_total = dict((x, 0) for x in range(len(attr200)))
@@ -137,7 +137,7 @@ for i, cls in enumerate(Yc):
 #     wrong = pred - act
 #     for j in wrong:
 #         attr_wrong_pred[j] += 1
-cls_acc = np.array([(class_total[x] - class_er[x])/class_total[x] for x in range(len(class36)) if class_total[x]>0])
+cls_acc = np.array([(class_total[x] - class_er[x]) / class_total[x] for x in range(len(class35)) if class_total[x] > 0])
 class_total_wrong_pred = np.sum([x for x in class_wrong_pred.values()])
 # attr_acc = np.array([(attr_total[x] - attr_er[x])/attr_total[x] for x in range(len(attr200)) if attr_total[x]>0])
 # attr_total_wrong_pred = np.sum([x for x in attr_wrong_pred.values()])
@@ -150,7 +150,7 @@ with open(os.path.join(model_path, 'test_results.txt'), 'w') as f:
     f.write('Class prediction accuracy: {}\n'.format(np.mean(cls_acc)*100))
     # f.write('Attribute prediction accuracy: {}\n'.format(np.mean(attr_acc)*100))
     j = 0
-    for i, cls in enumerate(class36):
+    for i, cls in enumerate(class35):
         if class_total[i] == 0:
             continue
         print('{}% Total of class {}: {}, missed: {}, wrong predictions: {}'.format('%.2f'%(cls_acc[j]*100), cls, class_total[i], class_er[i], (class_wrong_pred[i]*100)/class_total_wrong_pred))

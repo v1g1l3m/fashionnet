@@ -2,20 +2,18 @@ import numpy as np
 import os
 import glob
 import time
-
 from keras.applications.vgg16 import preprocess_input
-from skimage.io import imread
 from PIL import Image
 from random import shuffle
 from multiprocessing import Process, Queue
-from utils import  bb_intersection_over_union
+from utils import bb_intersection_over_union
 import time
 
 # GLOBALS
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
-fashion_dataset_path = '../Data/fashion_data/'
+fashion_dataset_path = 'fashion_data/'
 
 def generate_arrays_from_file(path, batch_size, class_names, resize):
     images = []
@@ -234,7 +232,7 @@ class Parallel_image_read_transformer(object):
         self.terminate()
 
 if __name__ == "__main__":
-    class36 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
+    class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
                'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie',
                'Blouse',
                'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel', 'Sweatshorts',
@@ -291,7 +289,7 @@ if __name__ == "__main__":
     #         break
     #     t1 = time.time()
     # print('total time of {} iterations: {}'.format(i, total))
-    with Parallel_image_read_transformer(os.path.join(fashion_dataset_path, 'validation85.txt'), 32, class36, attr200, 10) as pargen:
+    with Parallel_image_read_transformer(os.path.join(fashion_dataset_path, 'validation85.txt'), 32, class35, attr200, 10) as pargen:
         next(pargen)
     #     time.sleep(45)
     #     i=0

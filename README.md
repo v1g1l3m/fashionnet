@@ -4,15 +4,12 @@
 ```sh
 # Virtual environment (optional)
 sudo apt install -y virtualenv
-
 # Tensorflow (optional)
-sudo apt-get install python-pip python-dev python-virtualenv # for Python 2.7
-virtualenv --system-site-packages tensorflow121_py27_gpu # for Python 2.7
-source tensorflow121_py27_gpu/bin/activate
-pip install --upgrade tensorflow-gpu  # for Python 2.7 and GPU
+sudo apt-get install python-pip python-dev python-virtualenv
+virtualenv --system-site-packages -p python3 tensorflow
+source tensorflow/bin/activate
 
 # Dependencies
-sudo apt install -y python-tk
 pip install -r requirements.txt 
 ```
 
@@ -39,7 +36,12 @@ pip install -r requirements.txt
 ### Create Dataset
 ```sh
 # For images in fashion_data, apply selective search algo to find ROI/bounding boxes. Crop and copy these ROI inside dataset
-python dataset_create.py
+python dataset_create.py - If runned dataset split 85/15 created and saved to train85.txt and validation85.txt. Class and attribute weights saved for futher calculations 
+```
+
+### Create bottleneck 
+```sh
+python create_bottleneck.py - Make *npz files of dataset of immidiate results of prediction VGG16 for faster training
 ```
 
 ### Train
@@ -53,18 +55,17 @@ python predict.py
 ```
 
 ### Misc
-dataset	- Contains images used for training, validation and testing.
+prediction	- Contains images used for testing.
 
 output	- Contains trained weights and bottleneck features.
 
-logs    - Contains logs and events used by tensorboard.
-
-
 ### MODEL
 ```sh
-						->	Classification Head (Categories)
-InputImage	->	VGG16 + Layers	--
-						->	Regression Head	(Confidnence in the Classification head prediction)
+									->	Bbox Head	(x1, y1, x2, y2) coordinates of surounding bbox
+
+InputImage	->	VGG16 + Layers	--	->  Attribute Head (Attributes)	
+
+									-> Classification Head (Categories)
 
 ```
 

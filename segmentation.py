@@ -17,8 +17,8 @@ logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ]
 img_width = 224             # For VGG16
 img_height = 224            # For VGG16
 img_channel = 3
-prediction_path = '../prediction/'
-fashion_dataset_path='../Data/fashion_data/'
+prediction_path = 'prediction/'
+fashion_dataset_path='fashion_data/'
 
 def selective_search_bbox_fast(image, region_pixels_threshold, min_edge=1, max_ratio=6):
     img_lbl, regions = selectivesearch.selective_search(image, scale=1, sigma=0)

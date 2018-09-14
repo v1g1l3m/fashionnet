@@ -1,8 +1,7 @@
 .idea/
 output*/
-results/
 models/
 __pycache__/
 tensorflow/
-best/
+fashion_data/
 *.pyc
