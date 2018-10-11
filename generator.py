@@ -2,102 +2,255 @@ import numpy as np
 import os
 import glob
 import time
-from keras.applications.vgg16 import preprocess_input
 from PIL import Image
-from random import shuffle
-from multiprocessing import Process, Queue
-from utils import bb_intersection_over_union
+from random import shuffle, choice
+from multiprocessing import Process, sharedctypes, Lock, Pipe, Queue
 import time
+import ctypes
+from operator import mul
+from functools import reduce
+import keras
+from keras_applications.vgg16 import preprocess_input
 
-# GLOBALS
-img_width = 224             # For VGG16
-img_height = 224            # For VGG16
-img_channel = 3
-fashion_dataset_path = 'fashion_data/'
-
-def generate_arrays_from_file(path, batch_size, class_names, resize):
-    images = []
-    class_names_ = np.zeros((batch_size, len(class_names)), dtype=np.float32)
-    iou_values = np.zeros((batch_size,), dtype=np.float32)
-    while True:
+class Parallel_image_transformer3(object):
+    def __init__(self, path, shapex, shapey, d=None):
+        self.path = os.path.split(path)[0]
+        self.batch_size = shapex[0]
+        self.img_width = shapex[2]
+        self.img_height = shapex[1]
+        self.img_name_class_attr_bbox_part = []
         with open(path) as f:
-            for image_path in f:
-                current_index = len(images)
-                img = Image.open(image_path.rstrip())
-                img = img.resize(resize)
-                img = np.array(img).astype(np.float32)
-                img[:, :, 0] -= 103.939
-                img[:, :, 1] -= 116.779
-                img[:, :, 2] -= 123.68
-                images.append(img)
-                if os.name == 'nt':
-                    image_path = image_path.replace('\\', '/')
-                iou_values[current_index] = np.float(image_path.split('_')[-1].split('.jpg')[0])
-                class_names_[current_index, class_names.index(image_path.split('/')[-2])] = iou_values[current_index]
-                if current_index < batch_size - 1:
-                    continue
-                out = np.array(images)
-                images = []
-                yield (out, [class_names_, iou_values])
-
-def image_read_transformer(dir, batch_size):
-    class_names = []
-    for name in sorted(os.listdir(dir)):
-        if os.path.isdir(os.path.join(dir, name)):
-            class_names.append(name)
-    img_name_class_iou_tuples = []
-    for class_name in class_names:
-        dataset_path = os.path.join(dir, class_name)
-        images_path_name = sorted(glob.glob(dataset_path + '/*.jpg'))
-        for name in images_path_name:
-            if os.name == 'nt':
-                name = name.replace('\\', '/')
-            iou = np.float(name.split('_')[-1].split('.jpg')[0])
-            class_1_hot = np.zeros((len(class_names),), dtype=np.float32)
-            class_1_hot[class_names.index(name.split('/')[-2])] = iou
-            img_name_class_iou_tuples.append((name, class_1_hot, iou))
-    while True:
-        shuffle(img_name_class_iou_tuples)
+            for line in f:
+                line = line.split()
+                img_path = line[0].replace('\\', '/')
+                pcbboxattr = np.zeros((1005,))
+                if line[1] != 'None':
+                    img_bbox = [float(x) for x in line[1].split('-')]
+                    pcbboxattr[1:5] = (img_bbox[0] + (img_bbox[2] - img_bbox[0]) / 2,
+                                       img_bbox[1] + (img_bbox[3] - img_bbox[1]) / 2,
+                                       (img_bbox[2] - img_bbox[0]) / 2,
+                                       (img_bbox[3] - img_bbox[1]) / 2)
+                if line[2].split('-')[0] != 'None':
+                    for x in map(int, line[2].split('-')):
+                        pcbboxattr[x + 5] = 1
+                if line[3] != 'None':
+                    pcbboxattr[0] = 1
+                self.img_name_class_attr_bbox_part.append((img_path, pcbboxattr))
+    def next(self):
         images_list = []
-        class_1_hot_list = []
-        iou_list = []
-        for path, class_1_hot, iou in img_name_class_iou_tuples:
-            current_batch_size = len(images_list)
-            img = Image.open(path)
-            img = img.resize((img_width, img_height))
+        pcbboxattr_list = []
+        while len(images_list) < self.batch_size:
+            img_path, pcbboxattr = choice(self.img_name_class_attr_bbox_part)
+            img = Image.open(img_path)
+            w, h = img.size[0], img.size[1]
+            if w > h:
+                d = (w - h) // 2
+                img = img.crop((d, 0, w - d, h))
+                pcbboxattr[1:5] = ((pcbboxattr[1] * w - d) / h, pcbboxattr[2], (pcbboxattr[3] * w) / h, pcbboxattr[4])
+            else:
+                d = (h - w) // 2
+                img = img.crop((0, d, w, h - d))
+                pcbboxattr[1:5] = (pcbboxattr[1], (pcbboxattr[2] * h - d) / w, pcbboxattr[3], (pcbboxattr[4] * h) / w)
+            img = img.resize((self.img_width, self.img_height))
             img = np.array(img).astype(np.float32)
-            img[:, :, 0] -= 103.939
-            img[:, :, 1] -= 116.779
-            img[:, :, 2] -= 123.68
-            images_list.append(img)
-            class_1_hot_list.append(class_1_hot)
-            iou_list.append(iou)
-            if current_batch_size < batch_size - 1:
+            if len(img.shape) < 3 or img.shape[2] != 3:
                 continue
-            out_img = np.array(images_list)
-            out_cls = np.array(class_1_hot_list)
-            out_iou = np.array(iou_list)
+            images_list.append(img)
+            pcbboxattr_list.append(pcbboxattr)
+        images_list = preprocess_input(np.array(images_list))
+        pcbboxattr_list = np.array(pcbboxattr_list)
+        return (images_list, pcbboxattr_list)
+    def __next__(self):
+        return self.next()
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+class Parallel_image_transformer2(object):
+    def __init__(self, path, shapex, shapey, d=None):
+        self.path = os.path.split(path)[0]
+        self.batch_size = shapex[0]
+        self.img_width = shapex[2]
+        self.img_height = shapex[1]
+        self.wtm = 0
+        self.counter = 0
+        self.img_name_class_attr_bbox_part = []
+        with open(path) as f:
+            for line in f:
+                line = line.split()
+                img_path = line[0].replace('\\', '/')
+                bboxattr = np.zeros((1004,))
+                if line[1] != 'None':
+                    img_bbox = [float(x) for x in line[1].split('-')]
+                    bboxattr[:4] = (img_bbox[0] + (img_bbox[2] - img_bbox[0]) / 2,
+                                       img_bbox[1] + (img_bbox[3] - img_bbox[1]) / 2,
+                                       (img_bbox[2] - img_bbox[0]) / 2,
+                                       (img_bbox[3] - img_bbox[1]) / 2)
+                if line[2].split('-')[0] != 'None':
+                    for x in map(int, line[2].split('-')):
+                        bboxattr[x+4] = 1
+                self.img_name_class_attr_bbox_part.append((img_path, bboxattr))
+        self.shmemx = sharedctypes.RawArray(ctypes.c_double, reduce(mul, shapex))
+        self.shapex = shapex
+        self.shmemy = sharedctypes.RawArray(ctypes.c_double, reduce(mul, shapey))
+        self.shapey = shapey
+        self.lockr = Lock(); self.lockr.acquire()
+        self.lockw = Lock(); self.lockw.acquire()
+        self.p = Process(target=self.write_to_queue)
+        self.p.start()
+    def __iter__(self):
+        return self
+    def write_to_queue(self):
+        while True:
+            shuffle(self.img_name_class_attr_bbox_part)
             images_list = []
-            class_1_hot_list = []
-            iou_list = []
-            yield (out_img, [out_cls, out_iou])
+            bboxattr_list = []
+            for img_path, bboxattr in self.img_name_class_attr_bbox_part:
+                current_size = len(images_list)
+                img = Image.open(img_path)
+                w, h = img.size[0], img.size[1]
+                bboxattr[:4] = (bboxattr[0] / w, bboxattr[1] / h, bboxattr[2] / w, bboxattr[3] / h)
+                img = img.resize((self.img_width, self.img_height))
+                img = np.array(img).astype(np.float32)
+                if len(img.shape) < 3 or img.shape[2] != 3:
+                    continue
+                images_list.append(img)
+                bboxattr_list.append(bboxattr)
+                if (current_size < self.batch_size - 1):
+                    continue
+                images_list = preprocess_input(np.array(images_list))
+                bboxattr_list = np.array(bboxattr_list)
+                vx = np.ctypeslib.as_array(self.shmemx)
+                vx = vx.reshape(self.shapex)
+                vx[:] = images_list[:]
+                vy = np.ctypeslib.as_array(self.shmemy)
+                vy = vy.reshape(self.shapey)
+                vy[:] = bboxattr_list[:]
+                self.lockr.release()
+                images_list = []
+                bboxattr_list = []
+                self.lockw.acquire()
+    def next(self):
+        t = time.time()
+        self.lockr.acquire()
+        vx = np.ctypeslib.as_array(self.shmemx)
+        vx = vx.reshape(self.shapex)
+        vy = np.ctypeslib.as_array(self.shmemy)
+        vy = vy.reshape(self.shapey)
+        ret = (np.copy(vx), [np.copy(vy[:,:4]), np.copy(vy[:,4:1004])])
+        self.lockw.release()
+        self.wtm += time.time() - t
+        self.counter += 1
+        return ret
+    def terminate(self):
+        print('Summary time waiting to fetch data: {}'.format(self.wtm))
+        if self.counter:
+            print ('Average time waiting, ms: {}'.format(self.wtm*1000/self.counter))
+        self.p.terminate()
+        time.sleep(0.1)
+        if not self.p.is_alive():
+            self.p.join(timeout=1.0)
+    def __next__(self):
+        return self.next()
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.terminate()
 
-
-def np_arrays_reader(path):
-    while True:
+class Parallel_np_arrays_reader3(object):
+    def __init__(self, path, out_keys, c=None, d=None):
+        self.path = os.path.split(path)[0]
+        self.out_key = out_keys
+        self.np_arrays_path_list = []
+        self.wtm = 0
+        self.counter = 0
         with open(path) as f:
             for btl_name in f:
-                temp = np.load(open(btl_name.rstrip(), 'rb'))
-                yield (temp['btl'], [temp['cls'], temp['iou']])
+                self.np_arrays_path_list.append(btl_name.rstrip())
+    def next(self):
+        temp = np.load(open(os.path.join(self.path, choice(self.np_arrays_path_list)), 'rb'))
+        return (temp['btl'], temp[self.out_key])
+    def __next__(self):
+        return self.next()
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
+class Parallel_np_arrays_reader2(object):
+    def __init__(self, path, out_keys, slices, d=None):
+        self.path = os.path.split(path)[0]
+        self.out_keys = out_keys
+        self.slices = slices
+        self.np_arrays_path_list = []
+        self.wtm = 0
+        self.counter = 0
+        with open(path) as f:
+            for btl_name in f:
+                self.np_arrays_path_list.append(btl_name.rstrip())
+        temp = np.load(open(os.path.join(self.path, btl_name.rstrip()), 'rb'))
+        x = temp['btl']
+        self.shmemx = sharedctypes.RawArray(ctypes.c_double, len(x.reshape(-1)))
+        self.shapex = x.shape
+        y = np.concatenate([temp[x] for x in self.out_keys], axis=-1)
+        self.shmemy = sharedctypes.RawArray(ctypes.c_double, len(y.reshape(-1)))
+        self.shapey = y.shape
+        self.lockr = Lock(); self.lockr.acquire()
+        self.lockw = Lock(); self.lockw.acquire()
+        self.p = Process(target=self.write_to_queue)
+        self.p.start()
+    def __iter__(self):
+        return self
+    def write_to_queue(self):
+        while True:
+            shuffle(self.np_arrays_path_list)
+            for btl_name in self.np_arrays_path_list:
+                temp = np.load(open(os.path.join(self.path, btl_name), 'rb'))
+                vx = np.ctypeslib.as_array(self.shmemx)
+                vx = vx.reshape(self.shapex)
+                vx[:] = temp['btl'][:]
+                vy = np.ctypeslib.as_array(self.shmemy)
+                vy = vy.reshape(self.shapey)
+                vy[:] = np.concatenate([temp[x] for x in self.out_keys], axis=-1)[:]
+                self.lockr.release()
+                self.lockw.acquire()
+    def next(self):
+        t = time.time()
+        self.lockr.acquire()
+        vx = np.ctypeslib.as_array(self.shmemx)
+        vx = vx.reshape(self.shapex)
+        vy = np.ctypeslib.as_array(self.shmemy)
+        vy = vy.reshape(self.shapey)
+        ret = (np.copy(vx), [np.copy(vy[:,s]) for s in self.slices])
+        self.lockw.release()
+        self.wtm += time.time() - t
+        self.counter += 1
+        return ret
+    def terminate(self):
+        print('Summary time waiting to fetch data: {}'.format(self.wtm))
+        if self.counter:
+            print ('Average time waiting, ms: {}'.format(self.wtm*1000/self.counter))
+        self.p.terminate()
+        time.sleep(0.1)
+        if not self.p.is_alive():
+            self.p.join(timeout=1.0)
+    def __next__(self):
+        return self.next()
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.terminate()
 
-class Parallel_np_arrays_reader(object):
+class Parallel_np_arrays_reader1(object):
 
-    def __init__(self, path, out_keys, maxsize=100, numproc=1):
+    def __init__(self, path, out_keys, maxsize=30, numproc=3):
         self.q = Queue(maxsize)
         self.path = os.path.split(path)[0]
         self.out_keys = out_keys
         self.np_arrays_path_list = []
+        self.wtm = 0
+        self.counter = 0
         with open(path) as f:
             for btl_name in f:
                 self.np_arrays_path_list.append(btl_name.rstrip())
@@ -116,20 +269,21 @@ class Parallel_np_arrays_reader(object):
             for btl_name in self.np_arrays_path_list:
                 temp = np.load(open(os.path.join(self.path, btl_name), 'rb'))
                 if len(self.out_keys) == 1:
-                    out = temp[self.out_keys[0]]
+                    self.q.put((temp['btl'], temp[self.out_keys[0]]))
                 else:
-                    out= []
-                    for key in self.out_keys:
-                        if key == 'bbiou':
-                            out.append(temp[key][:,:4])
-                        else:
-                            out.append(temp[key])
-                self.q.put((temp['btl'], out))
+                    self.q.put((temp['btl'], [temp[x] for x in self.out_keys]))
                 
     def next(self):
-        return self.q.get()
+        t = time.time()
+        ret = self.q.get()
+        self.wtm += time.time() - t
+        self.counter += 1
+        return ret
 
     def terminate(self):
+        print('Summary time waiting to fetch data: {}'.format(self.wtm))
+        if self.counter:
+            print ('Average time waiting, ms: {}'.format(self.wtm*1000/self.counter))
         for p in self.prs:
             p.terminate()
             time.sleep(0.1)
@@ -148,114 +302,20 @@ class Parallel_np_arrays_reader(object):
     def __exit__(self, exc_type, exc_value, traceback):
         self.terminate()
 
-class Parallel_image_read_transformer(object):
-
-    def __init__(self, path, batch_size, class35, attr200, maxzise=100):
-        self.batch_size = batch_size
-        self.q = Queue(maxzise)
-        self.img_name_class_attr_bbox_iou = []
-        with open(path) as f:
-            for line in f:
-                line = line.split()
-                img_path = line[0]
-                img_bbox = [float(x) for x in line[1].split('-')]
-                attrs_1_hot = np.zeros(200, )
-                if line[2].split('-')[0] != 'None':
-                    for x in line[2].split('-'):
-                        if int(x) in attr200:
-                            attrs_1_hot[attr200.index(int(x))] = 1
-                class_1_hot = np.zeros((len(class35),), dtype=np.float32)
-                if line[3] in class35:
-                    class_1_hot[class35.index(line[3])] = 1
-                w, h = int(line[4]), int(line[5])
-                iou = bb_intersection_over_union([0, 0, w, h], [img_bbox[0] * w, img_bbox[1] * h, (img_bbox[2] - img_bbox[0]) * w, (img_bbox[3] - img_bbox[1]) * h])
-                img_bbox.append(iou)
-                self.img_name_class_attr_bbox_iou.append((img_path, class_1_hot, attrs_1_hot, img_bbox))
-        self.p = Process(target=self.write_to_queue)
-        self.p.start()
-
-    def __iter__(self):
-        return self
-
-    def write_to_queue(self):
-        while True:
-            shuffle(self.img_name_class_attr_bbox_iou)
-            images_list = []
-            class_1_hot_list = []
-            attrs_list = []
-            bbox_list = []
-            for path, class_1_hot, attrs_1_hot, bbox in self.img_name_class_attr_bbox_iou:
-                current_batch_size = len(images_list)
-                try:
-                    img = Image.open(path)
-                except:
-                    print('Image not found:', path)
-                    continue
-                img = img.resize((img_width, img_height))
-                img = np.array(img).astype(np.float32)
-                images_list.append(img)
-                class_1_hot_list.append(class_1_hot)
-                attrs_list.append(attrs_1_hot)
-                bbox_list.append(bbox)
-                if current_batch_size < self.batch_size - 1:
-                    continue
-                out_img = np.array(images_list)
-                out_img = preprocess_input(out_img)
-                out_cls = np.array(class_1_hot_list)
-                out_bbiou = np.array(bbox_list)
-                out_attr = np.array(attrs_list)
-                images_list = []
-                class_1_hot_list = []
-                attrs_list = []
-                bbox_list = []
-                self.q.put((out_img, out_attr))
-
-    def next(self):
-        return self.q.get()
-
-    def terminate(self):
-        self.p.terminate()
-        time.sleep(0.1)
-        if not self.p.is_alive():
-            self.p.join(timeout=1.0)
-            self.q.close()
-
-    # Python 3 compatibility
-    def __next__(self):
-        return self.next()
-
-    # with statement interface
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.terminate()
-
 if __name__ == "__main__":
-    class35 = ['Blazer', 'Top', 'Dress', 'Chinos', 'Jersey', 'Cutoffs', 'Kimono', 'Cardigan', 'Jeggings', 'Button-Down',
-               'Romper', 'Skirt', 'Joggers', 'Tee', 'Turtleneck', 'Culottes', 'Coat', 'Henley', 'Jeans', 'Hoodie',
-               'Blouse',
-               'Tank', 'Shorts', 'Bomber', 'Jacket', 'Parka', 'Sweatpants', 'Leggings', 'Flannel', 'Sweatshorts',
-               'Jumpsuit', 'Poncho', 'Trunks', 'Sweater', 'Robe']
-    attr200 = [730, 365, 513, 495, 836, 596, 822, 254, 884, 142, 212, 883, 837, 892, 380, 353, 196, 546, 335, 162, 441,
-               717,
-               760, 568, 310, 705, 745, 81, 226, 830, 620, 577, 1, 640, 956, 181, 831, 720, 601, 112, 820, 935, 969,
-               358,
-               933, 983, 616, 292, 878, 818, 337, 121, 236, 470, 781, 282, 913, 93, 227, 698, 268, 61, 681, 713, 239,
-               839,
-               722, 204, 457, 823, 695, 993, 0, 881, 817, 571, 565, 770, 751, 692, 593, 825, 574, 50, 207, 186, 237,
-               563,
-               300, 453, 897, 944, 438, 688, 413, 409, 984, 191, 697, 368, 133, 676, 11, 754, 800, 83, 14, 786, 141,
-               841,
-               415, 608, 276, 998, 99, 851, 429, 287, 815, 437, 747, 44, 988, 249, 543, 560, 653, 843, 208, 899, 321,
-               115,
-               887, 699, 15, 764, 48, 749, 852, 811, 862, 392, 937, 87, 986, 129, 336, 689, 245, 911, 309, 775, 638,
-               184,
-               797, 512, 45, 682, 139, 306, 880, 231, 802, 264, 648, 410, 30, 356, 531, 982, 116, 599, 774, 900, 218,
-               70,
-               562, 108, 25, 450, 785, 877, 18, 42, 624, 716, 36, 920, 423, 784, 788, 538, 325, 958, 480, 20, 38, 931,
-               666,
-               561]
+    wtm = time.time()
+    train_steps = 100
+    with Parallel_image_transformer2('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/train_95-5.txt', (32,224,224,3), (32,1005)) as train_gen:
+    # with Parallel_np_arrays_reader3('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/bottleneck128/btl_train_npz.txt', 'pcbboxattr', 30, 3) as train_gen:
+    # with Parallel_np_arrays_reader2('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/bottleneck128/btl_train_npz.txt', 'pcbboxattr') as train_gen:
+    # train_gen = np_arrays_reader('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/bottleneck128/btl_train_npz.txt', 'pcbboxattr')
+        for i in range(train_steps):
+            x, y = next(train_gen)
+            print(y[0][:5])
+    wtm = time.time() - wtm
+    print ('Total time : {}'.format(wtm))
+            # time.sleep(0.03)
+
     # np_arrays_path_list = []
     # with open('E:\\ML\\bottleneck_test\\btl_validation_npz.txt') as f:
         # for btl_name in f:
@@ -289,8 +349,8 @@ if __name__ == "__main__":
     #         break
     #     t1 = time.time()
     # print('total time of {} iterations: {}'.format(i, total))
-    with Parallel_image_read_transformer(os.path.join(fashion_dataset_path, 'validation85.txt'), 32, class35, attr200, 10) as pargen:
-        next(pargen)
+    # with Parallel_image_read_transformer(os.path.join(fashion_dataset_path, 'validation85.txt'), 32, class35, attr200, 10) as pargen:
+    #     next(pargen)
     #     time.sleep(45)
     #     i=0
     #     total=0
