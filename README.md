@@ -71,6 +71,7 @@ InputImage	->	VGG16 + Layers	--	->  Attribute Head (Attributes)
 
 ### RESULTS
 ![alt text](https://raw.githubusercontent.com/v1g1l3m/fashionnet/master/prediction/results/Blazer_00000053.jpg "Prediction")
+
 Online Demo available here:
 http://172.104.150.223:8000/demos/demo
 
