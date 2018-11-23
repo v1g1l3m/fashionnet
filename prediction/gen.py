@@ -16,8 +16,8 @@ part = 'test'
 if len(sys.argv) > 2:
 	part = str(sys.argv[2])
 
-fashion_dataset_path='fashion_data/'
-predict_path = 'prediction/'
+fashion_dataset_path='../fashion_data/'
+predict_path = ''
 class_names = []
 with open(fashion_dataset_path + 'Anno/list_category_cloth.txt') as f:
 	next(f)
