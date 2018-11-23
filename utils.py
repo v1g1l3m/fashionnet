@@ -19,14 +19,16 @@ img_channel = 3
 def init_globals(fashion_dataset_path):
     input_shape = (img_width, img_height, img_channel)
     class_names = []
+    class_type = dict()
     missing = ['Sundress', 'Cape', 'Nightdress', 'Shirtdress']
     with open(fashion_dataset_path + 'Anno/list_category_cloth.txt') as f:
         next(f)
         next(f)
         for line in f:
-            line = line.split()[0]
-            if line not in missing:
-                class_names.append(line)
+            line = line.split()
+            if line[0] not in missing:
+                class_names.append(line[0])
+                class_type[line[0]] = int(line[1])
     attr_names = []
     with open(os.path.join(fashion_dataset_path, 'Anno/list_attr_cloth.txt')) as f:
         next(f)
@@ -35,7 +37,7 @@ def init_globals(fashion_dataset_path):
             attr_names.append('-'.join(line.split()[:-1]))
     # logging.info('classes {} {}'.format(len(class_names), class_names))
     # logging.info('attributes {} {}'.format(len(attr_names), attr_names))
-    return (class_names, input_shape, attr_names)
+    return (class_names, class_type, input_shape, attr_names)
 
 def get_attr300():
     attr300 = [730, 365, 513, 884, 495, 836, 596, 822, 254, 142, 212, 226, 353, 162, 310, 546, 717, 837, 335, 380, 196, 892, 568, 441, 705, 81, 760, 601, 993, 620, 181, 830, 577, 112, 969, 955, 935, 1, 640, 358, 831, 720, 282, 820, 337, 681, 933, 983, 470, 616, 292, 236, 878, 121, 781, 818, 437, 93, 695, 61, 239, 770, 268, 713, 688, 913, 204, 698, 186, 881, 839, 722, 565, 786, 457, 823, 50, 571, 0, 817, 413, 429, 560, 751, 692, 593, 574, 453, 287, 825, 207, 191, 880, 563, 237, 300, 368, 897, 944, 11, 800, 811, 133, 920, 409, 984, 24, 697, 676, 245, 754, 83, 14, 141, 841, 415, 325, 608, 276, 843, 99, 851, 815, 747, 862, 44, 988, 249, 543, 775, 139, 18, 653, 264, 208, 87, 231, 899, 321, 115, 699, 15, 764, 531, 48, 749, 272, 852, 42, 937, 986, 129, 184, 336, 648, 911, 116, 872, 309, 201, 624, 30, 638, 797, 512, 45, 802, 450, 306, 423, 360, 410, 218, 154, 958, 982, 683, 708, 854, 599, 774, 900, 70, 562, 108, 785, 544, 793, 960, 666, 468, 36, 909, 848, 784, 538, 480, 20, 124, 612, 38, 90, 931, 674, 649, 953, 330, 58, 628, 153, 691, 159, 27, 389, 189, 110, 723, 618, 943, 474, 47, 947, 104, 307, 73, 941, 39, 396, 77, 279, 701, 658, 262, 131, 777, 902, 971, 567, 324, 929, 482, 889, 619, 827, 948, 891, 296, 901, 416, 72, 328, 302, 875, 662, 694, 671, 234, 277, 678, 667, 840, 642, 597, 669, 907, 489, 146, 293, 799, 446, 974, 476, 397, 842, 5, 449, 756, 763, 869, 725, 203, 119, 210, 132, 444, 654, 611, 977, 174, 893, 987, 921, 789, 150, 967, 687, 991, 17, 930, 821]
@@ -55,7 +57,7 @@ def bb_intersection_over_union(boxes1, boxes2):
     iou = interArea / (boxAArea + boxBArea - interArea)
     return iou
 
-def plot_history(output_path, sep=';', show=False):
+def plot_history(output_path, sep=';'):
     def plot_history(metric, names, log):
         plt.style.use("ggplot")
         (fig, ax) = plt.subplots(len(names), 1, figsize=(8, 8))
@@ -70,10 +72,10 @@ def plot_history(output_path, sep=';', show=False):
             ax[i].plot(log.index, log[l], label=l)
             ax[i].plot(log.index, log["val_" + l],
                        label="val_" + l)
-            ymin = np.min([np.min(log["val_" + l][20:]), np.min(log[l][20:])])
-            ymax = np.max([np.max(log["val_" + l][20:]), np.max(log[l][20:])])
-            if len(log[l]) > 20:
-                ax[i].set_ylim([ymin, ymax])
+            # ymin = np.min([np.min(log["val_" + l][20:]), np.min(log[l][20:])])
+            # ymax = np.max([np.max(log["val_" + l][20:]), np.max(log[l][20:])])
+            # if len(log[l]) > 20:
+            #     ax[i].set_ylim([ymin, ymax])
             ax[i].legend()
         # save the accuracies figure
         plt.tight_layout()
@@ -88,8 +90,7 @@ def plot_history(output_path, sep=';', show=False):
     if accs:
         plot_history('Accuracy', accs, log)
     plot_history('Loss', losses, log)
-    if show:
-        plt.show()
+    plt.show()
     return
 
 def get_image_paths(prediction_path):
@@ -98,7 +99,7 @@ def get_image_paths(prediction_path):
         images_path_name = [x.replace('\\', '/') for x in images_path_name]
     return images_path_name
 
-def draw_rect(ax, img, gt_bbox, text=None, textcolor=(0,0,0), edgecolor='red',linewidth=4):
+def draw_rect(ax, img, gt_bbox, text=None, textcolor=(0,0,0), edgecolor='red',linewidth=1):
     def display_bbox_text(img, bbox, text, color=(0, 0, 0), fontsize=32):
         draw = ImageDraw.Draw(img)
         # font = ImageFont.truetype(<font-file>, <font-size>)
@@ -211,7 +212,9 @@ def change_bottleneck(btl_path, m, num_per_file):
                     
                     
 if __name__ == '__main__':
-    change_bottleneck('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/bottleneck256_350', 7, 224)
+    # change_bottleneck('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/bottleneck256_350', 7, 224)
+    import sys
+    plot_history(sys.argv[1])
     # btl_path = '/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/bottleneck128'
     # btl_path_save = btl_path + 'us'
     # btl_train_path = os.path.join(btl_path_save, 'train')

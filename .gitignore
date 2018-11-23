@@ -4,4 +4,6 @@ models/
 __pycache__/
 tensorflow/
 fashion_data/
+prediction/
 *.pyc
+test1.py

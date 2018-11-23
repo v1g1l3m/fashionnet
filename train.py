@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 import datetime
@@ -11,8 +12,11 @@ from keras.optimizers import *
 from keras.models import Model
 from keras.models import model_from_json, load_model
 from keras.layers import *
-from keras.callbacks import ModelCheckpoint, CSVLogger, TensorBoard, EarlyStopping, TerminateOnNaN
-from keras.applications.vgg16 import preprocess_input, VGG16
+from keras.callbacks import ModelCheckpoint, CSVLogger, EarlyStopping, TerminateOnNaN, LearningRateScheduler
+from keras.applications.resnet50 import ResNet50
+from keras.applications.vgg19 import VGG19
+from keras_contrib.applications import ResNet, basic_block, bottleneck
+
 from keras.utils import plot_model
 from keras.metrics import top_k_categorical_accuracy
 from sklearn.utils import class_weight
@@ -22,48 +26,37 @@ import logging
 logging.basicConfig(level=logging.INFO, format="[%(lineno)4s : %(funcName)-30s ] %(message)s")
 
 ### GLOBALS
-img_width = 224             # For VGG16
-img_height = 224            # For VGG16
-img_channel = 3
-fashion_dataset_path = '/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/'
-# fashion_dataset_path = 'fashion_data/'
-btl_path = os.path.join(fashion_dataset_path, 'bottleneck226_350')
+fashion_dataset_path = 'fashion_data/'
+btl_path = os.path.join(fashion_dataset_path, 'bottleneck_500')
 
 
 def create_model(is_input_bottleneck, input_shape, param):
     if is_input_bottleneck is True:
-        model_inputs = Input(shape=(input_shape), name='input_vgg16')
+        model_inputs = Input(shape=(input_shape), name='input_cnn')
         common_inputs = model_inputs
     else:
-        base_model = VGG16(weights='imagenet', include_top=False, input_shape=input_shape)
+        base_model = ResNet50(weights='imagenet', include_top=False, input_shape=input_shape)
+        # base_model = VGG16(weights='imagenet', include_top=False, input_shape=input_shape)
         model_inputs = base_model.input
         common_inputs = base_model.output
+        # common_inputs = base_model.layers[16].output
+        # for layer in base_model.layers:
+        #     layer.trainable = False
 
-    x = MaxPooling2D(padding='same', pool_size=(3, 3))(common_inputs)
-    x = Flatten()(x)
+
+    x = Conv2D(2048, name='conv_5_1', kernel_size=[1, 1], kernel_initializer=VarianceScaling(mode='fan_avg', distribution='uniform'))(common_inputs)
     x = BatchNormalization()(x)
-    fc_local = Dense(200, activation='relu', name='fc_local')(x)
+    x = Activation('relu')(x)
+    x = GlobalAveragePooling2D()(x)
+    head_attr = Dense(491, activation='sigmoid', name='pr_attr')(x)
 
-    x = Conv2D(512, name='conv_5_1', kernel_size=[3, 3], data_format='channels_last', activation='relu', kernel_initializer=VarianceScaling(mode='fan_avg', distribution='uniform'))(common_inputs)
-    x = Conv2D(512, name='conv_5_2', kernel_size=[3, 3], data_format='channels_last', activation='relu', kernel_initializer=VarianceScaling(mode='fan_avg', distribution='uniform'))(x)
-    x = Conv2D(3072, name='conv_5_3', kernel_size=[3, 3], data_format='channels_last', activation='relu', kernel_initializer=VarianceScaling(mode='fan_avg', distribution='uniform'))(x)
-    cnv_pool = GlobalAveragePooling2D()(x)
-
-    x = Concatenate()([cnv_pool, fc_local])
+    x = Conv2D(200, name='conv_5_2', kernel_size=[1, 1], kernel_initializer=VarianceScaling(mode='fan_avg', distribution='uniform'))(common_inputs)
     x = BatchNormalization()(x)
-    head_attr = Dense(350, activation='sigmoid', name='pr_attr')(x)
-    head_class = Dense(len(class_names), activation='softmax', name='pr_cls')(x)
-
-    x = BatchNormalization()(fc_local)
-    head_bbox = Dense(4, activation='sigmoid', name='pr_bbox')(x)
-
+    x = Activation('relu')(x)
+    x = GlobalAveragePooling2D()(x)
+    head_cls =  Dense(33, activation='softmax', name='pr_cls')(x)
     ## Create Model
-    model = Model(inputs=model_inputs, outputs=[head_bbox, head_attr, head_class])
-    # if is_input_bottleneck is False:
-    for layer in model.layers:
-        if layer.name in ['pr_bbox', 'fc_local']:
-            logging.info('Not taining layer: {}'.format(layer.name)) 
-            layer.trainable = False
+    model = Model(inputs=model_inputs, outputs=[head_attr, head_cls])
     logging.info('summary:{}'.format(model.summary()))
     return model
 
@@ -90,63 +83,59 @@ def loss_mse(y_true, y_pred):
 import keras.losses
 keras.losses.loss_cat_cross = loss_cat_cross
 
+def step_decay(epoch):
+	initial_lrate = 2e-3
+	drop = 0.5
+	epochs_drop = 1.0
+	lrate = initial_lrate * math.pow(drop, math.floor((1+epoch)/epochs_drop))
+	return lrate
+
 def train_model(output_path, param):
-    # batch_size = 52
-    # val_steps = 12717//batch_size
-    # train_steps = 241597//batch_size
-    train_steps = 1525#762#1525
-    val_steps = 79
-    epochs = 50
-    # with Parallel_image_transformer2('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/train_95-5.txt', (batch_size, 224, 224, 3), (batch_size, 1004)) as train_gen:
-    #     with Parallel_image_transformer2('/media/star/3C4C65AA4C65601E/dev/deepfashion/fashion_data/validation_95-5.txt', (batch_size, 224, 224, 3), (batch_size, 1004)) as val_gen:
-    with Parallel_np_arrays_reader1(os.path.join(btl_path, 'btl_train_npz.txt'), ['attr', 'cls'], 10) as train_gen:
-        with Parallel_np_arrays_reader1(os.path.join(btl_path, 'btl_validation_npz.txt'), ['attr', 'cls'], 10) as val_gen:
-    # with Parallel_np_arrays_reader2(os.path.join(btl_path, 'btl_train_npz.txt'), ['bbox', 'attr', 'cls'], [slice(0, 4), slice(4, 354),slice(354, 400)]) as train_gen:
-    #     with Parallel_np_arrays_reader2(os.path.join(btl_path, 'btl_validation_npz.txt'), ['bbox', 'attr', 'cls'], [slice(0, 4), slice(4, 354),slice(354, 400)]) as val_gen:
-        # temp = get_validation_data(os.path.join(btl_path, 'btl_validation_npz.txt'))
-        # val_data = (temp['btl'], [temp['bbox'], temp['attr']])
-#         with open(os.path.join(fashion_dataset_path, 'attr_weights.pkl'), 'rb') as f:
-#             attr_weight = pickle.load(f)
+    batch_size = int(sys.argv[2])
+    val_steps = 11407//batch_size
+    train_steps = 216708//batch_size
+    # val_steps = 35
+    # train_steps = 677
+    epochs = 10
+    with Parallel_image_transformer('fashion_data/train_95-ac.txt', (batch_size, 224, 224, 3)) as train_gen:
+        with Parallel_image_transformer('fashion_data/validation_95-ac.txt', (batch_size, 224, 224, 3)) as val_gen:
+    # with Parallel_np_arrays_reader(os.path.join(btl_path, 'btl_train_npz.txt'), ['attr_cls'], 5) as train_gen:
+    #     with Parallel_np_arrays_reader(os.path.join(btl_path, 'btl_validation_npz.txt'), ['attr_cls'], 5) as val_gen:
             log_path = os.path.join(output_path, 'model_train.csv')
             csv_log = CSVLogger(log_path , separator=';', append=False)
             filepath = os.path.join(output_path, "best_model-{epoch:03d}-{loss:.4f}-{val_loss:.4f}.h5")
-            # early_stop = EarlyStopping(monitor='acc', patience=10, verbose=1, mode='auto')
+            # early_stopper = EarlyStopping(min_delta=0.001, patience=10)
             checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1, save_best_only=False,
                                          save_weights_only=False, mode='auto', period=1)
-            # callbacks_list = [csv_log, checkpoint, early_stop]
-            callbacks_list = [csv_log, checkpoint, TerminateOnNaN()]
+            lrate = LearningRateScheduler(step_decay)
+            # callbacks_list = [csv_log, checkpoint, early_stopper]
+            callbacks_list = [csv_log, checkpoint, lrate]
 
-            model = create_model(True, (14, 14, 512), param)
-            # model = create_model(False, (224, 224, 3), param)
-            # model.load_weights('output2/best_weights.hdf5', by_name=True)
-            # model.load_weights('output1/best_weights.hdf5', by_name=True)
-            # model = load_model('output2/final_model.h5')
-            # model.load_weights('output1/best-model.hdf5', by_name=True)
-            # model.save('output2/final_model.h5')
-            return
-            # with open(os.path.join(output_path, 'bottleneck_fc_model.json'), 'w') as f:
-            #     f.write(model.to_json())
+            model = create_model(False, (224, 224, 3), param)
+            # model = create_model(True, (7, 7, 2048), param)
+            # model = ResNet((160, 96, 3), 4, basic_block, repetitions=[2, 2, 2, 1])
+            model.load_weights('output3/best_weights.hdf5', by_name=True)
+            # model = load_model('output4/best_model-001-1.2537-1.3404.h5')
+            for layer in model.layers:
+                if layer.name not in {'pr_cls', 'conv_5_2'}:
+                    layer.trainable = False
+            print(model.summary())
             plot_model(model, to_file=os.path.join(output_path, 'model.png'), show_shapes=True, show_layer_names=False)
-            ## Compile
-            model.compile(# optimizer=param,
-                          # optimizer=SGD(lr=3e-6, momentum=0.9, nesterov=True),
-                          # optimizer=Adam(lr=1e-3),
-                          # optimizer=Adadelta(lr=1e-3),
-                          optimizer=RMSprop(lr=2e-4),
-                          loss={
-                                'pr_attr': 'categorical_crossentropy',
-                                'pr_bbox': 'mse',
-                                'pr_cls': 'binary_crossentropy'
-                                },
-                          metrics=['accuracy'])
+            # ## Compile
+            model.compile(#optimizer=SGD(lr=0.1, momentum=0.9, nesterov=True),
+                          optimizer=Adam(lr=1e-3, decay=1e-5),
+                          # optimizer=Adadelta(),
+                          # loss='binary_crossentropy',
+                          loss={'pr_attr': 'binary_crossentropy', 'pr_cls': 'categorical_crossentropy'},
+                          # loss_weights=[1., 0.05],
+                          metrics=['categorical_accuracy'])
             t_begin = datetime.datetime.now()
             ## Fit
             model.fit_generator(train_gen, steps_per_epoch=train_steps,
                                     epochs=epochs,
                                     validation_data=val_gen,
                                     validation_steps=val_steps,
-                                    # class_weight=[1., 1., 1., 1., 1.] + list(attr_weight),
-                                    # use_multiprocessing=True,
+                                    verbose=1,
                                     callbacks=callbacks_list)
 
     print(datetime.datetime.now())
@@ -161,7 +150,7 @@ def task(param):
     if len(sys.argv) > 1:
         output_path = sys.argv[1]
         if len(sys.argv) > 2 and sys.argv[2] == 'plot':
-            plot_history(output_path, show=True)
+            plot_history(output_path)
             exit(0)
     else:
         if os.path.exists(output_path):
@@ -177,7 +166,7 @@ def task(param):
 ### MAIN ###
 if __name__ == '__main__':
     global class_names, input_shape, attr_names
-    class_names, input_shape, attr_names = init_globals(fashion_dataset_path)
+    class_names, class_type, input_shape, attr_names = init_globals(fashion_dataset_path)
     logging.info('bottleneck path: {}'.format( btl_path))
     task(1)
 

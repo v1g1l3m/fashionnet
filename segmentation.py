@@ -53,7 +53,7 @@ def cluster_bboxes(bboxes,orig_width, orig_height, width, height, preference=-0.
         bboxes_clustered.append((centroid[0] * orig_width, centroid[1] * orig_height, centroid[2] * orig_width, centroid[3] * orig_height))
     return bboxes_clustered
 
-def selective_search_aggregated(image_path):
+def selective_search_aggregated(image):
     def selective_search_bboxwh(image, scale, sigma, rescale, min_size=50):
         pl, ph = np.percentile(image, (rescale, 100 - rescale))
         image = skimage.exposure.rescale_intensity(image, in_range=(pl, ph))
@@ -73,7 +73,6 @@ def selective_search_aggregated(image_path):
                 continue
             candidates.add(r['rect'])
         return candidates
-    image = skimage.io.imread(image_path)
     bbox_agg = set()
     [bbox_agg.add(y) for x, y, z in [(300, 0, 0), (1, 0.35, 0), (300, 0, 25), (1, 0.35, 25)] for y in selective_search_bboxwh(image, x, y, z)]
     return list(bbox_agg)
