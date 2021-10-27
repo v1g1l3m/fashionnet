@@ -11,7 +11,7 @@ command-not-found==0.3
 cryptography==2.1.4
 cupshelpers==1.0
 cycler==0.10.0
-dask==0.19.1
+dask==2021.10.0
 decorator==4.3.0
 defer==1.0.6
 distro-info==0.18
